@@ -318,7 +318,12 @@ do
     if pct then
       SafeText(self.bar.textC, "%s / %s (%d%%)", Short(cur), Short(max), pct)
     else
-      SafeText(self.bar.textC, "%s / %s", cur, max)
+      -- Afgeschermd: laat het spel het percentage uitrekenen (Midnight-API).
+      local ok = ns.db.showText and UnitHealthPercent and pcall(function()
+        local p = UnitHealthPercent("player", false, CurveConstants and CurveConstants.ScaleTo100)
+        self.bar.textC:SetFormattedText("%s / %s (%.0f%%)", cur, max, p)
+      end)
+      if not ok then SafeText(self.bar.textC, "%s / %s", cur, max) end
     end
   end
 end
@@ -360,10 +365,28 @@ do
   end
 
   -- Energy-ticks herkennen: een stijging van ~20 energy = tick (Furor = 40, telt niet).
+  -- Is energy afgeschermd, dan gebruiken we het ritme: ticks vallen altijd op
+  -- hetzelfde punt in een cyclus van 2 sec, gewone spell-casts op willekeurige punten.
+  -- We houden een histogram bij van "tijd mod 2" en de piek is het tick-moment.
+  m.bins = {}
+  for i = 1, 20 do m.bins[i] = 0 end
+  function m:OnPowerSecret()
+    local now = GetTime()
+    local b = math.floor((now % 2) * 10) % 20 + 1
+    local peak, peakV = 1, -1
+    for i = 1, 20 do
+      self.bins[i] = self.bins[i] * 0.93
+      if self.bins[i] > peakV then peak, peakV = i, self.bins[i] end
+    end
+    self.bins[b] = self.bins[b] + 1
+    local dist = math.abs(b - peak)
+    if dist > 10 then dist = 20 - dist end
+    if peakV >= 1.5 and dist <= 1 then self.lastTick = now end
+  end
   function m:OnPower()
     if UnitPowerType("player") ~= 3 then self.lastPower = nil return end
     local e, max = UnitPower("player", 3), UnitPowerMax("player", 3)
-    if not readable(e, max) then return end
+    if not readable(e, max) then self:OnPowerSecret() return end
     if self.lastPower and e > self.lastPower then
       local d = e - self.lastPower
       if (d >= 18 and d <= 22) or (e == max and d < 20) then
@@ -483,15 +506,73 @@ do
     -- Streepjes hebben alleen max + kosten nodig, dus die werken ook als je huidige mana afgeschermd is.
     self:PlaceTicks(costOK and cost or 0, costOK and max or 0)
     if costOK and readable(cur) then
+      self:HideShift()
       local n = math.floor(cur / cost)
       SafeText(self.bar.textC, "x%d   %d%%", n, Pct(cur, max) or 0)
       if n == 0 then self.bar.textC:SetTextColor(1, 0.3, 0.3) else self.bar.textC:SetTextColor(1, 1, 1) end
+    elseif costOK and ns.db.showText and not self.shiftBroken and self.CurvesSupported() and self:BuildShift(cost, max) then
+      -- Mana afgeschermd: het spel rekent zelf via curves uit welk "xN"-label zichtbaar is.
+      self.bar.textC:SetText("")
+      if not pcall(self.UpdateShiftAlpha, self) then
+        self.shiftBroken = true
+        self:HideShift()
+      end
     else
+      self:HideShift()
       self.bar.textC:SetTextColor(1, 1, 1)
       SafeText(self.bar.textC, "%s / %s", cur, max)
     end
   end
   m.ShiftCost = ShiftCost
+
+  -- Per mogelijk aantal shifts k een label "xk" met een step-curve die 1 geeft
+  -- als mana% tussen k*kosten/max en (k+1)*kosten/max ligt, anders 0.
+  m.shiftFS, m.shiftN = {}, -1
+  function m.CurvesSupported()
+    return C_CurveUtil and C_CurveUtil.CreateCurve and UnitPowerPercent and Enum and Enum.LuaCurveType and true or false
+  end
+  function m:HideShift()
+    for _, fs in ipairs(self.shiftFS) do fs:Hide() end
+  end
+  function m:BuildShift(cost, max)
+    local key = cost .. ":" .. max
+    if key == self.shiftKey then return self.shiftOK end
+    self.shiftKey = key
+    self:HideShift()
+    self.shiftOK = pcall(function()
+      local n = math.min(math.floor(max / cost), 30)
+      for k = 0, n do
+        local c = C_CurveUtil.CreateCurve()
+        c:SetType(Enum.LuaCurveType.Step)
+        local lo, hi = k * cost / max, (k + 1) * cost / max
+        if k == 0 then
+          c:AddPoint(0, 1)
+        else
+          c:AddPoint(0, 0)
+          c:AddPoint(lo, 1)
+        end
+        c:AddPoint(hi, 0)
+        local fs = self.shiftFS[k + 1]
+        if not fs then
+          fs = NewFS(self.bar.bar, "CENTER")
+          fs:SetPoint("CENTER")
+          self.shiftFS[k + 1] = fs
+        end
+        fs:SetText("x" .. k)
+        if k == 0 then fs:SetTextColor(1, 0.3, 0.3) else fs:SetTextColor(1, 1, 1) end
+        fs.curve = c
+      end
+      self.shiftN = n
+    end)
+    return self.shiftOK
+  end
+  function m:UpdateShiftAlpha()
+    for k = 0, self.shiftN do
+      local fs = self.shiftFS[k + 1]
+      fs:SetAlpha(UnitPowerPercent("player", 0, false, fs.curve))
+      fs:Show()
+    end
+  end
 end
 
 -- Generieke icon-rij ------------------------------------------------
@@ -975,7 +1056,8 @@ local function ComputeAlpha()
     local mmax = UnitPowerMax("player", 0)
     return mmax == 0 or UnitPower("player", 0) >= mmax
   end)
-  if ok and full then return db.oocAlpha end
+  -- Niet te lezen (Forever schermt health/power af)? Buiten combat zonder vijandig target = dimmen.
+  if not ok or full then return db.oocAlpha end
   return 1
 end
 
@@ -1085,6 +1167,21 @@ SlashCmdList.COMPACTDRUIDBAR = function(msg)
   elseif cmd == "test" then
     ns:TestClearcast()
   elseif cmd == "debug" then
+    ns:Debug()
+  elseif cmd == "" or cmd == "config" or cmd == "options" then
+    if ns.OpenOptions then ns:OpenOptions() end
+  else
+    print("|cff4fe8ffCompact Druid Bar|r: /cdb (opties), /cdb unlock, /cdb lock, /cdb scale 1.2, /cdb reset, /cdb test, /cdbdebug")
+  end
+end
+
+-- Los commando zonder argumenten: in combat is de tekst achter /cdb afgeschermd.
+SLASH_COMPACTDRUIDBARDEBUG1 = "/cdbdebug"
+SlashCmdList.COMPACTDRUIDBARDEBUG = function()
+  if ns.db then ns:Debug() end
+end
+
+function ns:Debug()
     local function show(label, v)
       local state = readable(v) and tostring(v) or "AFGESCHERMD"
       print(("  %s: %s"):format(label, state))
@@ -1103,9 +1200,12 @@ SlashCmdList.COMPACTDRUIDBAR = function(msg)
     if a then show("Eerste buff spellId", a.spellId) else print("  Eerste buff: geen/onleesbaar") end
     local t = UnitExists("target") and ScanAuras("target", "HARMFUL|PLAYER")[1]
     if t then show("Eerste target-debuff spellId", t.spellId) else print("  Target-debuff: geen") end
-  elseif cmd == "" or cmd == "config" or cmd == "options" then
-    if ns.OpenOptions then ns:OpenOptions() end
-  else
-    print("|cff4fe8ffCompact Druid Bar|r: /cdb (opties), /cdb unlock, /cdb lock, /cdb scale 1.2, /cdb reset, /cdb test, /cdb debug")
-  end
+    show("Cooldown Dash (start)", (GetCooldown(KnownID("dash") or 1850)))
+    show("Clearcasting nu", HasClearcasting())
+    local mm = ns.modules.mana
+    print(("  Curves beschikbaar: %s, xN via curves: %s%s"):format(
+      tostring(mm.CurvesSupported()), tostring(mm.shiftOK == true),
+      mm.shiftBroken and " (MISLUKT)" or ""))
+    print("  UnitHealthPercent: " .. tostring(UnitHealthPercent ~= nil))
+    print(("  Energy-tick bekend: %s"):format(tostring(ns.modules.power.lastTick > 0)))
 end
