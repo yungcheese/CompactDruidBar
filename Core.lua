@@ -310,15 +310,23 @@ local function SetAuraTimer(icon, unit, aura)
   StyleCooldownText(icon)
 end
 
+-- Returns the list of auras plus an error text if the API refused.
 local function ScanAuras(unit, filter)
   local list = {}
-  if not (C_UnitAuras and C_UnitAuras.GetAuraDataByIndex) then return list end
+  if not (C_UnitAuras and C_UnitAuras.GetAuraDataByIndex) then return list, "no API" end
   for i = 1, 40 do
     local ok, a = pcall(C_UnitAuras.GetAuraDataByIndex, unit, i, filter)
-    if not ok or not a then break end
+    if not ok then return list, tostring(a) end
+    if not a then break end
     list[#list + 1] = a
   end
   return list
+end
+
+-- On Forever auras can't be read in combat. An empty result in combat
+-- therefore means "unknown", not "no auras": keep showing the last state.
+local function AurasUnknown(list, err)
+  return err ~= nil or (#list == 0 and UnitAffectingCombat("player"))
 end
 
 ------------------------------------------------------------------------
@@ -441,12 +449,20 @@ do
   m.gcd:SetHeight(2)
   m.gcd:SetPoint("BOTTOMLEFT", m.bar.bar, "BOTTOMLEFT", 0, 0)
   m.gcd:Hide()
+  function m:OnCast()
+    self.gcdStart = GetTime()
+    self.gcdDur = (ns.form == "cat") and 1.0 or 1.5
+  end
 
   m.frame:SetScript("OnUpdate", function()
     if ns.db and ns.db.gcdSpark then
       local s, d = GetCooldown(61304) -- 61304 = global cooldown
+      if not readable(s, d) then
+        -- Secret in combat: estimate from our own last cast (Classic GCD: 1.0s cat, 1.5s otherwise).
+        s, d = m.gcdStart, m.gcdDur
+      end
       local shown = false
-      if readable(s, d) and s and d and d > 0 then
+      if s and d and d > 0 then
         local p = (GetTime() - s) / d
         if p >= 0 and p < 1 then
           m.gcd:SetWidth(math.max(1, m.bar.bar:GetWidth() * p))
@@ -757,7 +773,11 @@ do
   end
   function m:Update()
     if not self.slots then self:Rebuild() end
-    local auras = UnitExists("target") and ScanAuras("target", "HARMFUL|PLAYER") or {}
+    local auras, err = {}, nil
+    if UnitExists("target") then auras, err = ScanAuras("target", "HARMFUL|PLAYER") end
+    -- Same target, in combat, nothing readable: keep the current icons/timers.
+    if UnitExists("target") and not self.targetChanged and AurasUnknown(auras, err) then return end
+    self.targetChanged = nil
     local byKey, byId, byName = IndexAuras(auras)
 
     if not byKey then
@@ -896,7 +916,9 @@ do
   end
   function m:Update()
     if not self.slots then self:Rebuild() end
-    local byKey, byId, byName = IndexAuras(ScanAuras("player", "HELPFUL"))
+    local auras, err = ScanAuras("player", "HELPFUL")
+    if AurasUnknown(auras, err) then return end -- unreadable in combat: keep the previous state
+    local byKey, byId, byName = IndexAuras(auras)
     if not byKey then return end -- secret: keep the previous state
     self:SetCount(#self.slots)
     for i, slot in ipairs(self.slots) do
@@ -1364,6 +1386,7 @@ ev:SetScript("OnEvent", function(_, event, arg1)
     TryRegister("BAG_UPDATE_DELAYED")
     TryRegister("UNIT_AURA", "player", "target")
     TryRegister("UNIT_POWER_FREQUENT", "player")
+    TryRegister("UNIT_SPELLCAST_SUCCEEDED", "player")
     TryRegister("UNIT_DISPLAYPOWER", "player")
     TryRegister("UNIT_MAXPOWER", "player")
 
@@ -1404,12 +1427,15 @@ ev:SetScript("OnEvent", function(_, event, arg1)
       ns.modules.debuffs:Update()
     end
   elseif event == "PLAYER_TARGET_CHANGED" then
+    ns.modules.debuffs.targetChanged = true
     ns.modules.debuffs:Update()
     ns.modules.combo:Update()
   elseif event == "SPELL_UPDATE_COOLDOWN" or event == "BAG_UPDATE_COOLDOWN" or event == "BAG_UPDATE_DELAYED" then
     ns.modules.cooldowns:Update()
   elseif event == "UNIT_POWER_FREQUENT" then
     ns.modules.power:OnPower()
+  elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
+    ns.modules.power:OnCast()
   elseif event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" then
     ns.modules.buffs:Update()
     ns.modules.debuffs:Update()
@@ -1576,7 +1602,7 @@ function ns:Debug()
       local state = readable(v) and tostring(v) or "SECRET"
       print(("  %s: %s"):format(label, state))
     end
-    print("|cff4fe8ffCompact Druid Bar debug|r build 3 (secret-API: " .. tostring(issecretvalue ~= nil) .. ", in combat: " .. tostring(UnitAffectingCombat("player")) .. ")")
+    print("|cff4fe8ffCompact Druid Bar debug|r build 5 (secret-API: " .. tostring(issecretvalue ~= nil) .. ", in combat: " .. tostring(UnitAffectingCombat("player")) .. ")")
     show("Health", UnitHealth("player"))
     show("Health max", UnitHealthMax("player"))
     show("Power type", UnitPowerType("player"))
@@ -1586,10 +1612,20 @@ function ns:Debug()
     show("Combo points", UnitPower("player", 4))
     show("Shift cost", ns.modules.mana.ShiftCost())
     show("Form", ns.form)
-    local a = ScanAuras("player", "HELPFUL")[1]
-    if a then show("First buff spellId", a.spellId) else print("  First buff: none/unreadable") end
-    local t = UnitExists("target") and ScanAuras("target", "HARMFUL|PLAYER")[1]
-    if t then show("First target debuff spellId", t.spellId) else print("  Target debuff: none") end
+    local buffs, berr = ScanAuras("player", "HELPFUL")
+    print(("  Buffs read: %d%s"):format(#buffs, berr and (" (ERROR " .. berr .. ")") or ""))
+    if buffs[1] then show("First buff spellId", buffs[1].spellId) end
+    if UnitExists("target") then
+      local debuffs, derr = ScanAuras("target", "HARMFUL|PLAYER")
+      print(("  Your target debuffs read: %d%s"):format(#debuffs, derr and (" (ERROR " .. derr .. ")") or ""))
+      if debuffs[1] then
+        show("First target debuff spellId", debuffs[1].spellId)
+        show("First target debuff expires", debuffs[1].expirationTime)
+      end
+    else
+      print("  Target: none")
+    end
+    show("Claw cost (clearcast fallback)", PowerCost(KnownID("claw") or 1082))
     local function try(label, fn)
       local ok, err = pcall(fn)
       if not ok then print("  " .. label .. ": ERROR " .. tostring(err)) end
