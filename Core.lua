@@ -169,7 +169,12 @@ local function KeyFromName(name)
       end
     end
   end
-  return NAME_TO_KEY[name]
+  local key = NAME_TO_KEY[name]
+  if key then return key end
+  -- Looser match for clients that name it differently ("Faerie Fire (Feral)", rank suffixes, ...).
+  if name:find("Faerie Fire", 1, true) then
+    return name:find("Feral", 1, true) and "ffFeral" or "ff"
+  end
 end
 local function SpellIcon(id)
   if C_Spell and C_Spell.GetSpellTexture then return C_Spell.GetSpellTexture(id) end
@@ -2045,7 +2050,7 @@ function ns:Debug()
       local state = readable(v) and tostring(v) or "SECRET"
       print(("  %s: %s"):format(label, state))
     end
-    print("|cff4fe8ffCompact Druid Bar debug|r build 8 (secret-API: " .. tostring(issecretvalue ~= nil) .. ", in combat: " .. tostring(UnitAffectingCombat("player")) .. ")")
+    print("|cff4fe8ffCompact Druid Bar debug|r build 9 (secret-API: " .. tostring(issecretvalue ~= nil) .. ", in combat: " .. tostring(UnitAffectingCombat("player")) .. ")")
     show("Health", UnitHealth("player"))
     show("Health max", UnitHealthMax("player"))
     show("Power type", UnitPowerType("player"))
@@ -2074,7 +2079,18 @@ function ns:Debug()
       print(("  Last cast: %s -> %s"):format(tostring(ns.SpellName(ns.lastCastID)),
         tostring(CAST_KEY[ns.lastCastID] or SPELL_TO_KEY[ns.lastCastID] or KeyFromName(ns.SpellName(ns.lastCastID)) or "not tracked")))
     end
-    print(("  Faerie Fire (Feral) ID: %s, Pounce ID: %s"):format(tostring(KnownID("ffFeral")), tostring(KnownID("pounce"))))
+    print(("  Faerie Fire (Feral) ID: %s, Faerie Fire ID: %s, Pounce ID: %s"):format(
+      tostring(KnownID("ffFeral")), tostring(KnownID("ff")), tostring(KnownID("pounce"))))
+    local tracked = {}
+    for k, c in pairs(ns.casts) do
+      tracked[#tracked + 1] = ("%s %.0fs"):format(k, math.max(0, c.start + c.dur - GetTime()))
+    end
+    print("  Tracked debuffs: " .. (#tracked > 0 and table.concat(tracked, ", ") or "none"))
+    local slots = {}
+    for _, slot in ipairs(ns.modules.debuffs.slots or {}) do
+      slots[#slots + 1] = slot.custom and ("custom:" .. tostring(slot.custom.name)) or table.concat(slot.keys, "/")
+    end
+    print("  Debuff slots: " .. (#slots > 0 and table.concat(slots, ", ") or "none"))
     show("Target GUID", UnitGUID and UnitGUID("target"))
     local function try(label, fn)
       local ok, err = pcall(fn)
