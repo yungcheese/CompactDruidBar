@@ -1,5 +1,5 @@
-# Bij een tag als v1.0.1 bouwt dit een zip, zet hem bij de GitHub-release
-# en uploadt hem naar CurseForge (zodra CF_API_KEY en X-Curse-Project-ID ingesteld zijn).
+# On a tag like v1.0.1 this builds a zip, attaches it to the GitHub release
+# and uploads it to CurseForge (once CF_API_KEY and X-Curse-Project-ID are set).
 name: Package and release
 
 on:

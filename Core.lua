@@ -1,8 +1,8 @@
 -- Compact Druid Bar - core
--- Gebouwd voor de WoW Forever client (1.60.1, interface 16001).
--- Forever gebruikt de Midnight-addonbeperkingen: in combat kunnen sommige
--- waarden "secret" zijn. Alles wat rekent of vergelijkt is daarom beschermd
--- met readable()/pcall, zodat de addon terugvalt i.p.v. errors te geven.
+-- Built for the WoW Forever client (1.60.1, interface 16001).
+-- Forever uses the Midnight addon restrictions: some values can be "secret".
+-- Everything that does math or comparisons is guarded with readable()/pcall,
+-- so the addon falls back gracefully instead of throwing errors.
 
 local ADDON, ns = ...
 _G.CompactDruidBar = ns
@@ -32,7 +32,7 @@ ns.MODULE_LABELS = {
   debuffs = "Target debuffs",
   cooldowns = "Cooldowns",
   buffs = "Buffs",
-  clearcast = "Clearcasting-icoon",
+  clearcast = "Clearcasting icon",
 }
 
 local DEFAULTS = {
@@ -63,7 +63,7 @@ end
 ns.CopyDefaults = CopyDefaults
 
 ------------------------------------------------------------------------
--- Spelldata (Classic spell-ID's, alle ranks)
+-- Spell data (Classic spell IDs, all ranks)
 ------------------------------------------------------------------------
 local S = {
   rip       = { 1079, 9492, 9493, 9752, 9894, 9896 },
@@ -102,8 +102,8 @@ for key, ids in pairs(S) do
   for _, id in ipairs(ids) do SPELL_TO_KEY[id] = SPELL_TO_KEY[id] or key end
 end
 
--- Per form: welke slots worden getoond. Een slot is een lijst van keys
--- (bijv. Faerie Fire normaal + feral in één vakje).
+-- Per form: which slots are shown. A slot is a list of keys
+-- (e.g. regular + feral Faerie Fire share one slot).
 local DEBUFF_SLOTS = {
   cat    = { { "rip" }, { "rake" }, { "pounce" }, { "ffFeral", "ff" } },
   bear   = { { "demo" }, { "ffFeral", "ff" } },
@@ -114,7 +114,7 @@ local COOLDOWNS = {
   bear   = { "charge", "bash", "enrage", "frenzied", "ffFeral", "barkskin" },
   caster = { "grasp", "barkskin", "innervate", "rebirth", "swiftmend", "nswift", "hurricane" },
 }
--- reminder = rood/grijs als hij ontbreekt; anders alleen zichtbaar als actief
+-- reminder = red/grey when missing; otherwise only highlighted while active
 local BUFFS = {
   { key = "motw", reminder = true },
   { key = "thorns", reminder = true },
@@ -318,7 +318,7 @@ do
     if pct then
       SafeText(self.bar.textC, "%s / %s (%d%%)", Short(cur), Short(max), pct)
     else
-      -- Afgeschermd: laat het spel het percentage uitrekenen (Midnight-API).
+      -- Secret: let the game compute the percentage (Midnight API).
       local ok = ns.db.showText and UnitHealthPercent and pcall(function()
         local p = UnitHealthPercent("player", false, CurveConstants and CurveConstants.ScaleTo100)
         self.bar.textC:SetFormattedText("%s / %s (%.0f%%)", cur, max, p)
@@ -364,10 +364,10 @@ do
     self.bar.textR:SetText("")
   end
 
-  -- Energy-ticks herkennen: een stijging van ~20 energy = tick (Furor = 40, telt niet).
-  -- Is energy afgeschermd, dan gebruiken we het ritme: ticks vallen altijd op
-  -- hetzelfde punt in een cyclus van 2 sec, gewone spell-casts op willekeurige punten.
-  -- We houden een histogram bij van "tijd mod 2" en de piek is het tick-moment.
+  -- Detect energy ticks: a gain of ~20 energy = tick (Furor = 40, ignored).
+  -- If energy is secret we use the rhythm instead: ticks always land on the
+  -- same point of a 2 sec cycle, regular casts land at random points.
+  -- We keep a histogram of "time mod 2"; its peak is the tick moment.
   m.bins = {}
   for i = 1, 20 do m.bins[i] = 0 end
   function m:OnPowerSecret()
@@ -503,7 +503,7 @@ do
     SetBar(self.bar, cur, max)
     local cost = ShiftCost()
     local costOK = readable(max, cost) and type(cost) == "number" and cost > 0 and type(max) == "number" and max > 0
-    -- Streepjes hebben alleen max + kosten nodig, dus die werken ook als je huidige mana afgeschermd is.
+    -- Tick marks only need max + cost, so they work even when current mana is secret.
     self:PlaceTicks(costOK and cost or 0, costOK and max or 0)
     if costOK and readable(cur) then
       self:HideShift()
@@ -511,7 +511,7 @@ do
       SafeText(self.bar.textC, "x%d   %d%%", n, Pct(cur, max) or 0)
       if n == 0 then self.bar.textC:SetTextColor(1, 0.3, 0.3) else self.bar.textC:SetTextColor(1, 1, 1) end
     elseif costOK and ns.db.showText and not self.shiftBroken and self.CurvesSupported() and self:BuildShift(cost, max) then
-      -- Mana afgeschermd: het spel rekent zelf via curves uit welk "xN"-label zichtbaar is.
+      -- Mana is secret: the game itself decides via curves which "xN" label is visible.
       self.bar.textC:SetText("")
       if not pcall(self.UpdateShiftAlpha, self) then
         self.shiftBroken = true
@@ -525,8 +525,8 @@ do
   end
   m.ShiftCost = ShiftCost
 
-  -- Per mogelijk aantal shifts k een label "xk" met een step-curve die 1 geeft
-  -- als mana% tussen k*kosten/max en (k+1)*kosten/max ligt, anders 0.
+  -- For every possible shift count k a label "xk" with a step curve that returns 1
+  -- when mana% is between k*cost/max and (k+1)*cost/max, otherwise 0.
   m.shiftFS, m.shiftN = {}, -1
   function m.CurvesSupported()
     return C_CurveUtil and C_CurveUtil.CreateCurve and UnitPowerPercent and Enum and Enum.LuaCurveType and true or false
@@ -575,7 +575,7 @@ do
   end
 end
 
--- Generieke icon-rij ------------------------------------------------
+-- Generic icon row ------------------------------------------------
 local function IconRow(key)
   local m = NewModule(key)
   m.icons, m.count, m.isIconRow = {}, 0, true
@@ -593,7 +593,7 @@ local function IconRow(key)
     self.frame:SetSize(w, ns.db.iconSize)
     self:Place()
   end
-  -- Iconen gecentreerd binnen het frame.
+  -- Icons centered inside the frame.
   function m:Place()
     local s, g = ns.db.iconSize, ns.db.spacing
     local off = math.max(0, (self.frame:GetWidth() - self:ContentWidth()) / 2)
@@ -639,7 +639,7 @@ do
     end
 
     if secretMode then
-      -- Fallback: ID's zijn afgeschermd -> toon gewoon al jouw debuffs op het target.
+      -- Fallback: IDs are secret -> just show all of your debuffs on the target.
       local n = math.min(#auras, 8)
       self:SetCount(n)
       for i = 1, n do
@@ -723,7 +723,7 @@ do
     local auras = ScanAuras("player", "HELPFUL")
     local found = {}
     for _, a in ipairs(auras) do
-      if not readable(a.spellId) then return end -- afgeschermd: vorige staat laten staan
+      if not readable(a.spellId) then return end -- secret: keep the previous state
       local k = SPELL_TO_KEY[a.spellId]
       if k then found[k] = a end
     end
@@ -743,7 +743,7 @@ do
   end
 end
 
--- Clearcasting-icoon -----------------------------------------------
+-- Clearcasting icon ------------------------------------------------
 do
   local m = NewModule("clearcast")
   m.icon = CreateIcon(m.frame)
@@ -777,7 +777,7 @@ do
 end
 
 ------------------------------------------------------------------------
--- Clearcasting detectie + flits/geluid
+-- Clearcasting detection + flash/sound
 ------------------------------------------------------------------------
 local flash = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
 flash:SetBackdrop({ edgeFile = TEX, edgeSize = 2 })
@@ -801,8 +801,8 @@ local function HasClearcasting()
     local ok, a = pcall(C_UnitAuras.GetPlayerAuraBySpellID, CLEARCASTING_ID)
     if ok and a then return true end
   end
-  -- Fallback als aura's in combat afgeschermd zijn: tijdens clearcasting kost
-  -- je volgende spell 0.
+  -- Fallback when auras are secret in combat: while clearcasting
+  -- your next spell costs 0.
   local key = (ns.form == "cat" and "claw") or (ns.form == "bear" and "maul") or "ht"
   local id = KnownID(key)
   if id then
@@ -839,7 +839,7 @@ function ns:TestClearcast()
 end
 
 ------------------------------------------------------------------------
--- Layout, verplaatsen, schalen, loskoppelen
+-- Layout, moving, scaling, detaching
 ------------------------------------------------------------------------
 local function SavePoint(frame)
   local p, _, rp, x, y = frame:GetPoint()
@@ -909,13 +909,13 @@ local function CreateMover(m)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
     GameTooltip:AddLine(ns.MODULE_LABELS[m.key])
     if ns.db.modules[m.key].detached then
-      GameTooltip:AddLine("Slepen: verplaats dit onderdeel", 1, 1, 1)
-      GameTooltip:AddLine("Scrollwiel: schaal dit onderdeel", 1, 1, 1)
-      GameTooltip:AddLine("Rechtsklik: weer vastkoppelen aan het blok", 1, 1, 1)
+      GameTooltip:AddLine("Drag: move this element", 1, 1, 1)
+      GameTooltip:AddLine("Mouse wheel: scale this element", 1, 1, 1)
+      GameTooltip:AddLine("Right-click: attach back to the bar", 1, 1, 1)
     else
-      GameTooltip:AddLine("Slepen: verplaats het hele blok", 1, 1, 1)
-      GameTooltip:AddLine("Shift+slepen: maak dit onderdeel los", 1, 1, 1)
-      GameTooltip:AddLine("Scrollwiel: schaal het hele blok", 1, 1, 1)
+      GameTooltip:AddLine("Drag: move the whole bar", 1, 1, 1)
+      GameTooltip:AddLine("Shift+drag: detach this element", 1, 1, 1)
+      GameTooltip:AddLine("Mouse wheel: scale the whole bar", 1, 1, 1)
     end
     GameTooltip:Show()
   end)
@@ -947,7 +947,7 @@ function ns:Layout()
       if key == "clearcast" then
         f:SetPoint("TOPRIGHT", root, "TOPLEFT", -4, 0)
       elseif m.isIconRow and db.mergeIcons and shown then
-        flow[#flow + 1] = m -- wordt hieronder samen op één regel gezet
+        flow[#flow + 1] = m -- laid out together on one line below
         f:SetPoint("TOP", root, "TOP", 0, 0)
       elseif shown then
         f:SetPoint("TOP", root, "TOP", 0, -y)
@@ -961,17 +961,17 @@ function ns:Layout()
     local mv = m.mover
     mv:SetShown(not db.locked and mdb.enabled)
     if mdb.detached then mv.bg:SetColorTexture(1, 0.55, 0.1, 0.4) else mv.bg:SetColorTexture(0.1, 0.6, 1, 0.35) end
-    mv.label:SetText(self.MODULE_LABELS[key] .. (mdb.detached and " (los)" or ""))
+    mv.label:SetText(self.MODULE_LABELS[key] .. (mdb.detached and " (detached)" or ""))
   end
 
-  -- Icon-groepen (debuffs, cooldowns, buffs) naast elkaar, gecentreerd;
-  -- alleen naar een nieuwe regel als het niet meer in de breedte past.
+  -- Icon groups (debuffs, cooldowns, buffs) side by side, centered;
+  -- only wrap to a new line when they no longer fit the width.
   if #flow > 0 then
     local s, gap = db.iconSize, db.spacing + 6
     local rows, row, rowW = {}, {}, 0
     for _, m in ipairs(flow) do
       local cw = m:ContentWidth()
-      if cw == 0 then cw = s * 2 end -- leeg (alleen bij ontgrendeld)
+      if cw == 0 then cw = s * 2 end -- empty (only while unlocked)
       local add = (#row > 0 and gap or 0) + cw
       if #row > 0 and rowW + add > width then
         rows[#rows + 1] = { items = row, w = rowW }
@@ -1021,7 +1021,7 @@ function ns:SetLocked(locked)
   self.db.locked = locked
   self:Layout()
   if self.RefreshOptions then self.RefreshOptions() end
-  print("|cff4fe8ffCompact Druid Bar|r: " .. (locked and "vergrendeld." or "ontgrendeld. Sleep, Shift+sleep om los te maken, scroll om te schalen."))
+  print("|cff4fe8ffCompact Druid Bar|r: " .. (locked and "locked." or "unlocked. Drag to move, Shift+drag to detach, scroll to scale."))
 end
 
 function ns:ResetPositions()
@@ -1041,7 +1041,7 @@ function ns:ResetAll()
 end
 
 ------------------------------------------------------------------------
--- Zichtbaarheid (gedimd buiten combat)
+-- Visibility (dimmed out of combat)
 ------------------------------------------------------------------------
 local function ComputeAlpha()
   local db = ns.db
@@ -1056,7 +1056,7 @@ local function ComputeAlpha()
     local mmax = UnitPowerMax("player", 0)
     return mmax == 0 or UnitPower("player", 0) >= mmax
   end)
-  -- Niet te lezen (Forever schermt health/power af)? Buiten combat zonder vijandig target = dimmen.
+  -- Unreadable (Forever hides health/power)? Out of combat without a hostile target = dim.
   if not ok or full then return db.oocAlpha end
   return 1
 end
@@ -1079,7 +1079,7 @@ ev:SetScript("OnEvent", function(_, event, arg1)
     if arg1 ~= ADDON then return end
     local _, class = UnitClass("player")
     if class ~= "DRUID" then
-      print("|cff4fe8ffCompact Druid Bar|r: geen druid, addon blijft uit.")
+      print("|cff4fe8ffCompact Druid Bar|r: not a druid, addon disabled.")
       return
     end
     CompactDruidBarDB = CompactDruidBarDB or {}
@@ -1163,7 +1163,7 @@ SlashCmdList.COMPACTDRUIDBAR = function(msg)
     ns:Layout()
   elseif cmd == "reset" then
     ns:ResetPositions()
-    print("|cff4fe8ffCompact Druid Bar|r: posities en schaal gereset.")
+    print("|cff4fe8ffCompact Druid Bar|r: positions and scale reset.")
   elseif cmd == "test" then
     ns:TestClearcast()
   elseif cmd == "debug" then
@@ -1171,11 +1171,11 @@ SlashCmdList.COMPACTDRUIDBAR = function(msg)
   elseif cmd == "" or cmd == "config" or cmd == "options" then
     if ns.OpenOptions then ns:OpenOptions() end
   else
-    print("|cff4fe8ffCompact Druid Bar|r: /cdb (opties), /cdb unlock, /cdb lock, /cdb scale 1.2, /cdb reset, /cdb test, /cdbdebug")
+    print("|cff4fe8ffCompact Druid Bar|r: /cdb (options), /cdb unlock, /cdb lock, /cdb scale 1.2, /cdb reset, /cdb test, /cdbdebug")
   end
 end
 
--- Los commando zonder argumenten: in combat is de tekst achter /cdb afgeschermd.
+-- Separate command without arguments: in combat the text after /cdb is secret.
 SLASH_COMPACTDRUIDBARDEBUG1 = "/cdbdebug"
 SlashCmdList.COMPACTDRUIDBARDEBUG = function()
   if ns.db then ns:Debug() end
@@ -1183,7 +1183,7 @@ end
 
 function ns:Debug()
     local function show(label, v)
-      local state = readable(v) and tostring(v) or "AFGESCHERMD"
+      local state = readable(v) and tostring(v) or "SECRET"
       print(("  %s: %s"):format(label, state))
     end
     print("|cff4fe8ffCompact Druid Bar debug|r build 3 (secret-API: " .. tostring(issecretvalue ~= nil) .. ", in combat: " .. tostring(UnitAffectingCombat("player")) .. ")")
@@ -1194,24 +1194,24 @@ function ns:Debug()
     show("Mana", UnitPower("player", 0))
     show("Mana max", UnitPowerMax("player", 0))
     show("Combo points", UnitPower("player", 4))
-    show("Shift-kosten", ns.modules.mana.ShiftCost())
+    show("Shift cost", ns.modules.mana.ShiftCost())
     show("Form", ns.form)
     local a = ScanAuras("player", "HELPFUL")[1]
-    if a then show("Eerste buff spellId", a.spellId) else print("  Eerste buff: geen/onleesbaar") end
+    if a then show("First buff spellId", a.spellId) else print("  First buff: none/unreadable") end
     local t = UnitExists("target") and ScanAuras("target", "HARMFUL|PLAYER")[1]
-    if t then show("Eerste target-debuff spellId", t.spellId) else print("  Target-debuff: geen") end
+    if t then show("First target debuff spellId", t.spellId) else print("  Target debuff: none") end
     local function try(label, fn)
       local ok, err = pcall(fn)
-      if not ok then print("  " .. label .. ": FOUT " .. tostring(err)) end
+      if not ok then print("  " .. label .. ": ERROR " .. tostring(err)) end
     end
     try("Cooldown", function() show("Cooldown Dash (start)", (GetCooldown(KnownID("dash") or 1850))) end)
-    try("Clearcasting", function() show("Clearcasting nu", HasClearcasting()) end)
+    try("Clearcasting", function() show("Clearcasting now", HasClearcasting()) end)
     try("Curves", function()
       local mm = ns.modules.mana
-      print(("  Curves beschikbaar: %s, xN via curves: %s%s"):format(
+      print(("  Curves available: %s, xN via curves: %s%s"):format(
         tostring(mm.CurvesSupported()), tostring(mm.shiftOK == true),
-        mm.shiftBroken and " (MISLUKT)" or ""))
+        mm.shiftBroken and " (FAILED)" or ""))
     end)
     print("  UnitHealthPercent: " .. tostring(UnitHealthPercent ~= nil))
-    print(("  Energy-tick bekend: %s"):format(tostring(ns.modules.power.lastTick > 0)))
+    print(("  Energy tick known: %s"):format(tostring(ns.modules.power.lastTick > 0)))
 end

@@ -1,4 +1,4 @@
--- Compact Druid Bar - optiepaneel (Esc > Options > AddOns > Compact Druid Bar, of /cdb)
+-- Compact Druid Bar - options panel (Esc > Options > AddOns > Compact Druid Bar, or /cdb)
 
 local ADDON, ns = ...
 
@@ -16,7 +16,7 @@ function ns:BuildOptions()
   sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
   sub:SetWidth(600)
   sub:SetJustifyH("LEFT")
-  sub:SetText("Ontgrendel om te verplaatsen. Slepen verplaatst het blok, Shift+slepen maakt een onderdeel los, rechtsklik koppelt het weer vast, scrollwiel schaalt.")
+  sub:SetText("Unlock to move. Drag moves the bar, Shift+drag detaches an element, right-click attaches it again, mouse wheel scales.")
 
   local function Header(x, y, text)
     local h = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -75,31 +75,31 @@ function ns:BuildOptions()
     end
   end
 
-  -- Linkerkolom: formaat
+  -- Left column: size
   local x, y = 16, -70
-  Header(x, y, "Formaat")
+  Header(x, y, "Size")
   y = y - 20
   local sliders = {
-    { "Schaal (blok)", 0.3, 3, 0.05, "scale", "%.2f" },
-    { "Breedte", 80, 400, 5, "width" },
-    { "Hoogte grote bars", 4, 40, 1, "barHeight" },
-    { "Hoogte combo/mana", 2, 30, 1, "smallBarHeight" },
-    { "Icoongrootte", 10, 60, 1, "iconSize" },
-    { "Tekstgrootte", 6, 20, 1, "fontSize" },
-    { "Ruimte tussen onderdelen", 0, 12, 1, "spacing" },
-    { "Zichtbaarheid buiten combat", 0, 1, 0.05, "oocAlpha", "%.2f" },
+    { "Scale (bar)", 0.3, 3, 0.05, "scale", "%.2f" },
+    { "Width", 80, 400, 5, "width" },
+    { "Main bar height", 4, 40, 1, "barHeight" },
+    { "Combo/mana bar height", 2, 30, 1, "smallBarHeight" },
+    { "Icon size", 10, 60, 1, "iconSize" },
+    { "Font size", 6, 20, 1, "fontSize" },
+    { "Spacing", 0, 12, 1, "spacing" },
+    { "Out of combat opacity", 0, 1, 0.05, "oocAlpha", "%.2f" },
   }
   for _, sl in ipairs(sliders) do
     Slider(x, y, sl[1], sl[2], sl[3], sl[4], sl[5], sl[6])
     y = y - 42
   end
 
-  -- Rechterkolom: onderdelen
+  -- Right column: elements
   x, y = 300, -70
-  Header(x, y, "Onderdelen")
+  Header(x, y, "Elements")
   local los = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
   los:SetPoint("TOPLEFT", x + 190, y)
-  los:SetText("Los")
+  los:SetText("Detach")
   y = y - 20
   for _, key in ipairs(ns.MODULE_ORDER) do
     Checkbox(x, y, ns.MODULE_LABELS[key],
@@ -114,21 +114,21 @@ function ns:BuildOptions()
   end
 
   y = y - 10
-  Header(x, y, "Weergave")
+  Header(x, y, "Display")
   y = y - 20
-  Checkbox(x, y, "Tekst op de bars", function() return db().showText end, function(v) db().showText = v end); y = y - 24
+  Checkbox(x, y, "Text on bars", function() return db().showText end, function(v) db().showText = v end); y = y - 24
   Checkbox(x, y, "Energy-tick timer", function() return db().energyTick end, function(v) db().energyTick = v end); y = y - 24
-  Checkbox(x, y, "Powershift-streepjes op mana", function() return db().manaTicks end, function(v) db().manaTicks = v end); y = y - 24
-  Checkbox(x, y, "Iconen samenvoegen op één regel", function() return db().mergeIcons end, function(v) db().mergeIcons = v end); y = y - 24
+  Checkbox(x, y, "Powershift marks on mana", function() return db().manaTicks end, function(v) db().manaTicks = v end); y = y - 24
+  Checkbox(x, y, "Merge icons onto one line", function() return db().mergeIcons end, function(v) db().mergeIcons = v end); y = y - 24
 
   y = y - 10
   Header(x, y, "Clearcasting")
   y = y - 20
-  Checkbox(x, y, "Energy-bar licht op", function() return db().ccGlow end, function(v) db().ccGlow = v end); y = y - 24
-  Checkbox(x, y, "Geluid", function() return db().ccSound end, function(v) db().ccSound = v end); y = y - 24
-  Checkbox(x, y, "Rand-flits", function() return db().ccFlash end, function(v) db().ccFlash = v end); y = y - 24
+  Checkbox(x, y, "Highlight energy bar", function() return db().ccGlow end, function(v) db().ccGlow = v end); y = y - 24
+  Checkbox(x, y, "Sound", function() return db().ccSound end, function(v) db().ccSound = v end); y = y - 24
+  Checkbox(x, y, "Border flash", function() return db().ccFlash end, function(v) db().ccFlash = v end); y = y - 24
 
-  -- Knoppen
+  -- Buttons
   local function Button(bx, by, w, text, onClick)
     local b = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
     b:SetPoint("TOPLEFT", bx, by)
@@ -139,10 +139,10 @@ function ns:BuildOptions()
   end
   local by = -70 - 20 - 42 * #sliders - 10
   local lockBtn = Button(16, by, 140, "", function() ns:SetLocked(not db().locked) end)
-  refreshers[#refreshers + 1] = function() lockBtn:SetText(db().locked and "Ontgrendelen" or "Vergrendelen") end
+  refreshers[#refreshers + 1] = function() lockBtn:SetText(db().locked and "Unlock" or "Lock") end
   Button(162, by, 120, "Test clearcast", function() ns:TestClearcast() end)
-  Button(16, by - 30, 140, "Reset posities", function() ns:ResetPositions(); ns.RefreshOptions() end)
-  Button(162, by - 30, 120, "Alles resetten", function() ns:ResetAll(); ns.RefreshOptions() end)
+  Button(16, by - 30, 140, "Reset positions", function() ns:ResetPositions(); ns.RefreshOptions() end)
+  Button(162, by - 30, 120, "Reset all", function() ns:ResetAll(); ns.RefreshOptions() end)
 
   function ns.RefreshOptions()
     for _, r in ipairs(refreshers) do r() end

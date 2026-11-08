@@ -1,38 +1,45 @@
-# Compact Druid Bar (WoW Forever 1.60.1)
+# Compact Druid Bar
 
-## Installeren
-Kopieer de map `CompactDruidBar` naar:
+A compact, fully scalable druid bar for **WoW Forever** (client 1.60.1, interface 16001). Built for feral powershifting, but it adapts to every form.
+
+## Features
+- **Health** and **energy / rage / mana**: the bar switches with your form
+- **Combo points** (Cat Form only)
+- **Mana while shapeshifted** with a **powershift counter** (`x3` = shifts you can still afford) and a mark on the bar for each shift's cost
+- **Energy tick timer**: a white spark runs across the energy bar and reaches the end on the next tick
+- **Clearcasting alerts**: the energy bar lights up, a large pulsing icon appears, plus a sound and a border flash
+- **Target debuffs** (Rip, Rake, Pounce, Faerie Fire / Demoralizing Roar / Moonfire, Insect Swarm), **cooldowns** and **buffs** (Mark of the Wild, Thorns, Tiger's Fury, Nature's Grasp), centered on one line
+- Only shows spells you know, so it grows with you while leveling
+- Dimmed out of combat
+
+## Installation
+Copy the `CompactDruidBar` folder to:
 `World of Warcraft\_forever_\Interface\AddOns\`
-(standaard: `C:\Program Files (x86)\World of Warcraft\_forever_\Interface\AddOns\`)
 
-Start het spel (of `/reload`) en zet de addon aan in het AddOns-menu op het characterscherm.
+Then restart the game (or `/reload`) and enable the addon in the AddOns menu on the character screen.
 
-## Commando's
-| Commando | Wat |
+## Commands
+| Command | Action |
 |---|---|
-| `/cdb` | Optiepaneel openen |
-| `/cdb unlock` / `/cdb lock` | Verplaatsmodus aan/uit |
-| `/cdb scale 1.2` | Schaal van het blok |
-| `/cdb reset` | Posities en schaal terugzetten |
-| `/cdb test` | Clearcast-weergave 3 sec testen (glow, icoon, geluid, flits) |
+| `/cdb` | Open the options panel |
+| `/cdb unlock` / `/cdb lock` | Toggle move mode |
+| `/cdb scale 1.2` | Set the bar scale |
+| `/cdb reset` | Reset positions and scale |
+| `/cdb test` | Preview the clearcasting alert for 3 seconds |
+| `/cdbdebug` | Show which values the client exposes (works in combat) |
 
-## Verplaatsen en schalen (ontgrendeld)
-- **Slepen**: verplaatst het hele blok
-- **Shift+slepen** op een onderdeel: maakt het los
-- **Rechtsklik** op een los onderdeel: koppelt het weer vast
-- **Scrollwiel**: schaalt het blok, of een los onderdeel apart
+## Moving and scaling (while unlocked)
+- **Drag**: move the whole bar
+- **Shift+drag** an element: detach it
+- **Right-click** a detached element: attach it again
+- **Mouse wheel**: scale the bar, or a detached element on its own
 
-## Onderdelen
-- Health, Energy/Rage/Mana (past zich aan per form)
-- Combo points (alleen in Cat)
-- Mana tijdens shapeshift met **xN** = aantal powershifts dat je nog kunt doen, plus streepjes per shift-kosten
-- Energy-tick: wit streepje dat over de energy-bar loopt, met een tick als het rechts aankomt
-- Clearcasting: energy-bar wordt lichtblauw, groot pulserend icoon, geluid en een rand-flits
-- Target-debuffs (Rip, Rake, Pounce, FF / Demo Roar / Moonfire, Insect Swarm), cooldowns en buffs (MotW, Thorns, Omen, Tiger's Fury)
-- Alleen spells die je kent worden getoond, dus de bar groeit mee tijdens het levelen
+## WoW Forever addon restrictions
+Forever applies the Midnight addon restrictions, so health, energy and mana are "secret" values for addons. Compact Druid Bar works around this:
+- Bars and numbers are still drawn by the game itself.
+- The powershift counter uses game-side curves instead of addon math.
+- The energy tick is derived from the 2-second rhythm of energy updates.
+- If target debuff IDs are hidden in combat, it shows all of your debuffs on the target instead.
 
-## Forever-beperkingen
-Forever schermt sommige combat-informatie af voor addons. Daarom valt de addon terug in plaats van errors te geven:
-- Kan de addon target-debuffs in combat niet herkennen? Dan toont hij al jouw debuffs op het target.
-- Zijn je eigen buffs afgeschermd? Dan blijft de laatst bekende stand staan.
-- Clearcasting werkt via de buff, met als reserve "je volgende spell kost 0".
+## License
+MIT
