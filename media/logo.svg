@@ -1,65 +1,90 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#21402e"/>
-      <stop offset="1" stop-color="#0c1912"/>
+    <linearGradient id="ring" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f7e09a"/><stop offset="0.45" stop-color="#c8963a"/><stop offset="1" stop-color="#6e4a14"/>
     </linearGradient>
-    <linearGradient id="paw" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ffd76e"/>
-      <stop offset="1" stop-color="#f0861f"/>
-    </linearGradient>
-    <radialGradient id="glow" cx="0.5" cy="0.42" r="0.5">
-      <stop offset="0" stop-color="#5fe3ff" stop-opacity="0.32"/>
-      <stop offset="1" stop-color="#5fe3ff" stop-opacity="0"/>
+    <radialGradient id="sky" cx="0.5" cy="0.38" r="0.68">
+      <stop offset="0" stop-color="#4b3283"/><stop offset="0.65" stop-color="#25174a"/><stop offset="1" stop-color="#110a24"/>
     </radialGradient>
-    <linearGradient id="energy" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ffe066"/>
-      <stop offset="1" stop-color="#e8b400"/>
+    <radialGradient id="aura" cx="0.5" cy="0.55" r="0.5">
+      <stop offset="0" stop-color="#b48cff" stop-opacity="0.45"/><stop offset="1" stop-color="#b48cff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="maneOuter" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8a4a1c"/><stop offset="1" stop-color="#3e1d08"/>
     </linearGradient>
-    <linearGradient id="mana" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#4f8dff"/>
-      <stop offset="1" stop-color="#2459d6"/>
+    <linearGradient id="maneInner" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#b8682a"/><stop offset="1" stop-color="#6a3312"/>
     </linearGradient>
-    <clipPath id="tile">
-      <rect x="16" y="16" width="480" height="480" rx="96"/>
-    </clipPath>
+    <linearGradient id="fur" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffc165"/><stop offset="1" stop-color="#d47a22"/>
+    </linearGradient>
+    <linearGradient id="horn" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff6de"/><stop offset="1" stop-color="#b9a170"/>
+    </linearGradient>
+    <radialGradient id="eye" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fffbd0"/><stop offset="0.6" stop-color="#ffe14a"/><stop offset="1" stop-color="#f0a800"/>
+    </radialGradient>
+    <mask id="moon"><circle cx="372" cy="128" r="46" fill="#fff"/><circle cx="352" cy="114" r="40" fill="#000"/></mask>
+    <radialGradient id="eyeGlow" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#ffe14a" stop-opacity="0.7"/><stop offset="1" stop-color="#ffe14a" stop-opacity="0"/></radialGradient>
+    <clipPath id="inner"><circle cx="256" cy="256" r="214"/></clipPath>
   </defs>
 
-  <!-- Background tile -->
-  <rect x="16" y="16" width="480" height="480" rx="96" fill="url(#bg)"/>
-  <rect x="19" y="19" width="474" height="474" rx="93" fill="none" stroke="#4a7d5d" stroke-width="6"/>
-  <circle cx="256" cy="196" r="200" fill="url(#glow)" clip-path="url(#tile)"/>
+  <!-- Medallion -->
+  <circle cx="256" cy="256" r="244" fill="url(#ring)"/>
+  <circle cx="256" cy="256" r="230" fill="none" stroke="#5a3a0e" stroke-width="3"/>
+  <circle cx="256" cy="256" r="214" fill="url(#sky)" stroke="#3b2608" stroke-width="5"/>
 
-  <!-- Paw -->
-  <g fill="url(#paw)" stroke="#5a2e05" stroke-opacity="0.35" stroke-width="4">
-    <ellipse cx="160" cy="158" rx="36" ry="46" transform="rotate(-22 160 158)"/>
-    <ellipse cx="222" cy="104" rx="36" ry="48" transform="rotate(-7 222 104)"/>
-    <ellipse cx="290" cy="104" rx="36" ry="48" transform="rotate(7 290 104)"/>
-    <ellipse cx="352" cy="158" rx="36" ry="46" transform="rotate(22 352 158)"/>
-    <path d="M256 176 C 318 176 370 226 370 274 C 370 310 338 324 308 318 C 288 314 273 305 256 305 C 239 305 224 314 204 318 C 174 324 142 310 142 274 C 142 226 194 176 256 176 Z"/>
+  <g clip-path="url(#inner)">
+    <circle cx="118" cy="150" r="3" fill="#e9dcff" opacity="0.9"/><circle cx="150" cy="110" r="2.5" fill="#e9dcff" opacity="0.9"/><circle cx="372" cy="120" r="2" fill="#e9dcff" opacity="0.9"/><circle cx="400" cy="190" r="3" fill="#e9dcff" opacity="0.9"/><circle cx="96" cy="230" r="2" fill="#e9dcff" opacity="0.9"/><circle cx="420" cy="260" r="2.5" fill="#e9dcff" opacity="0.9"/><circle cx="180" cy="80" r="2" fill="#e9dcff" opacity="0.9"/>
+    <circle cx="372" cy="128" r="46" fill="#efe6ff" mask="url(#moon)"/>
+    <circle cx="256" cy="290" r="200" fill="url(#aura)"/>
+
+
+    <!-- Mane -->
+    <path d="M238.4 165.3 Q253.5 149.1 293.8 139.1 Q300.4 159.5 299.1 172.1 Q324.8 157.4 373.4 163.8 Q362.7 192.2 348.2 208.4 Q376.8 209.1 414.5 239.0 Q392.1 257.8 372.7 264.4 Q408.5 279.1 436.9 329.8 Q396.6 332.9 365.9 325.1 Q382.1 351.6 376.7 401.9 Q346.9 390.0 329.6 374.2 Q333.9 411.1 304.1 459.1 Q281.9 427.4 273.6 398.7 Q258.7 422.5 261.7 445.0 Q209.1 411.5 212.9 391.9 Q184.2 412.1 171.9 440.2 Q144.6 375.8 163.8 355.6 Q126.5 360.1 99.6 379.7 Q110.1 308.0 139.3 299.6 Q113.6 284.7 89.3 287.8 Q124.8 234.5 146.1 238.9 Q126.2 210.3 98.4 198.2 Q162.4 170.9 182.4 189.8 Q187.5 168.4 178.0 157.1 Q233.2 154.0 238.4 165.3 Z" fill="url(#maneOuter)" stroke="#2a1204" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M268.5 178.7 Q285.0 168.8 321.4 169.9 Q322.3 188.6 318.4 198.8 Q342.7 193.4 380.9 210.7 Q366.4 231.4 351.6 241.2 Q372.8 249.3 394.6 282.7 Q374.4 293.1 359.3 294.5 Q383.3 314.6 393.1 362.0 Q361.0 356.5 339.2 344.4 Q343.3 367.5 325.6 403.9 Q305.9 390.9 296.8 377.6 Q289.9 403.0 255.3 429.4 Q244.5 404.6 243.5 385.3 Q225.6 400.8 223.1 419.4 Q186.4 380.0 193.6 365.2 Q166.8 373.2 152.1 391.6 Q142.4 334.1 160.4 322.8 Q133.2 316.4 111.1 325.0 Q131.6 270.3 152.7 269.5 Q139.1 252.0 122.4 250.0 Q159.6 213.5 172.8 219.6 Q167.5 195.4 151.7 183.1 Q205.4 171.6 215.2 186.4 Q226.3 175.8 222.8 170.2 Q266.1 174.4 268.5 178.7 Z" fill="url(#maneInner)"/>
   </g>
 
-  <!-- Energy bar -->
-  <rect x="92" y="346" width="328" height="36" rx="6" fill="#070d09" stroke="#000" stroke-width="3"/>
-  <rect x="96" y="350" width="236" height="28" rx="3" fill="url(#energy)"/>
-  <rect x="246" y="350" width="4" height="28" fill="#ffffff" opacity="0.95"/>
+  <!-- Horns (in front of the mane) -->
+  <path d="M200 214 C150 210 104 182 82 120 C78 108 92 104 98 114 C120 150 158 170 214 182 Z" fill="url(#horn)" stroke="#5c4620" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M312 214 C362 210 408 182 430 120 C434 108 420 104 414 114 C392 150 354 170 298 182 Z" fill="url(#horn)" stroke="#5c4620" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M118 150 L128 142 M140 166 L150 156 M162 178 L170 167" stroke="#8a7550" stroke-width="3"/>
+  <path d="M394 150 L384 142 M372 166 L362 156 M350 178 L342 167" stroke="#8a7550" stroke-width="3"/>
 
-  <!-- Combo points -->
-  <g stroke="#000" stroke-width="3">
-    <rect x="92"  y="392" width="58" height="18" rx="3" fill="#ff7a1a"/>
-    <rect x="160" y="392" width="58" height="18" rx="3" fill="#ff7a1a"/>
-    <rect x="228" y="392" width="58" height="18" rx="3" fill="#ff7a1a"/>
-    <rect x="296" y="392" width="58" height="18" rx="3" fill="#070d09"/>
-    <rect x="364" y="392" width="56" height="18" rx="3" fill="#070d09"/>
-  </g>
+  <!-- Ears -->
+  <path d="M188 200 L196 148 L232 186 Z" fill="url(#fur)" stroke="#5a2a08" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M324 200 L316 148 L280 186 Z" fill="url(#fur)" stroke="#5a2a08" stroke-width="5" stroke-linejoin="round"/>
 
-  <!-- Mana bar with powershift marks -->
-  <rect x="92" y="420" width="328" height="22" rx="4" fill="#070d09" stroke="#000" stroke-width="3"/>
-  <rect x="95" y="423" width="210" height="16" rx="2" fill="url(#mana)"/>
-  <g fill="#000" opacity="0.85">
-    <rect x="160" y="423" width="3" height="16"/>
-    <rect x="226" y="423" width="3" height="16"/>
-    <rect x="292" y="423" width="3" height="16"/>
-    <rect x="358" y="423" width="3" height="16"/>
-  </g>
+  <!-- Head -->
+  <path d="M256 176 C306 176 346 206 350 252 C354 290 340 322 318 346 C300 366 280 380 256 384 C232 380 212 366 194 346 C172 322 158 290 162 252 C166 206 206 176 256 176 Z"
+        fill="url(#fur)" stroke="#5a2a08" stroke-width="6" stroke-linejoin="round"/>
+
+  <!-- Brow (fierce) -->
+  <path d="M192 246 L238 262 L236 270 L190 256 Z" fill="#7a3a0e"/>
+  <path d="M320 246 L274 262 L276 270 L322 256 Z" fill="#7a3a0e"/>
+
+  <!-- Eyes -->
+  <circle cx="218" cy="275" r="26" fill="url(#eyeGlow)"/><circle cx="294" cy="275" r="26" fill="url(#eyeGlow)"/>
+  <path d="M198 270 Q218 262 238 276 Q218 288 198 270 Z" fill="url(#eye)" stroke="#3a1a04" stroke-width="3"/>
+  <path d="M314 270 Q294 262 274 276 Q294 288 314 270 Z" fill="url(#eye)" stroke="#3a1a04" stroke-width="3"/>
+  <ellipse cx="220" cy="275" rx="3" ry="7" fill="#1a0c02"/>
+  <ellipse cx="292" cy="275" rx="3" ry="7" fill="#1a0c02"/>
+
+  <!-- Muzzle -->
+  <path d="M256 290 C286 290 306 306 306 328 C306 344 296 356 284 362 L228 362 C216 356 206 344 206 328 C206 306 226 290 256 290 Z" fill="#f7d39a"/>
+  <!-- Nose -->
+  <path d="M238 300 L274 300 L256 320 Z" fill="#a8484a" stroke="#4a1a10" stroke-width="3" stroke-linejoin="round"/>
+
+  <!-- Roaring mouth -->
+  <path d="M222 334 Q256 324 290 334 Q284 372 256 380 Q228 372 222 334 Z" fill="#5a0f12" stroke="#2a0606" stroke-width="3"/>
+  <path d="M234 336 Q256 360 278 336" fill="none" stroke="#c0474f" stroke-width="5"/>
+  <!-- Fangs -->
+  <path d="M228 334 L238 334 L234 362 Z" fill="#fffaf0" stroke="#6a5a40" stroke-width="2"/>
+  <path d="M274 334 L284 334 L278 362 Z" fill="#fffaf0" stroke="#6a5a40" stroke-width="2"/>
+  <path d="M240 376 L248 376 L244 362 Z" fill="#fffaf0"/>
+  <path d="M264 376 L272 376 L268 362 Z" fill="#fffaf0"/>
+
+  <!-- Whisker dots -->
+  <circle cx="226" cy="316" r="2.5" fill="#b07a40"/><circle cx="218" cy="326" r="2.5" fill="#b07a40"/>
+  <circle cx="286" cy="316" r="2.5" fill="#b07a40"/><circle cx="294" cy="326" r="2.5" fill="#b07a40"/>
 </svg>
