@@ -1,13 +1,15 @@
 # Changelog
 
 ## v1.0.0
-- First release: health, energy/rage/mana per form, combo points, mana with powershift counter, energy tick timer
-- Clearcasting: energy bar highlight, large icon, sound and border flash
-- Target debuffs, cooldowns and buffs per form, centered on one line
-- Single bar with detachable elements, per-element scaling, options panel (/cdb)
-- Works with WoW Forever's secret values (curves for the powershift counter, rhythm-based energy tick)
-- Selectable clearcasting sound (built-in, SharedMedia or custom SoundKit/FileDataID) and sound channel
-- Custom spells (cooldown / buff / debuff per form) and hiding built-in spells on a new Spells page
-- Rip/Rake refresh warning, mana potion + rune cooldowns, 5 combo point glow, GCD spark
-- Scrollable options panel
-- English UI text
+First release.
+
+- Health and energy/rage/mana bars that follow your form, combo points with a 5-point glow
+- Mana while shapeshifted with a powershift counter and cost marks
+- Energy tick timer and GCD spark
+- Clearcasting alert: energy bar highlight, large icon, border flash and a selectable sound (built-in, SharedMedia or custom SoundKit/FileDataID)
+- Target debuffs (Rip, Rake, Pounce, Faerie Fire, Demoralizing Roar, Moonfire, Insect Swarm) with a Rip/Rake refresh warning
+- Cooldowns per form, Mana Potion and Demonic/Dark Rune cooldowns, buff reminders, Tiger's Fury and Nature's Grasp timers
+- Custom spells and hiding built-in spells (/cdb spells)
+- One compact block with detachable, individually scalable elements; center snapping, exact X/Y position, unlocks in Edit Mode
+- Minimap addon list entry and optional minimap button
+- Works with WoW Forever's combat restrictions (game-side curves, rhythm-based energy tick, cast-based timers)

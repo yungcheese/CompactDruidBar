@@ -2,6 +2,7 @@ package-as: CompactDruidBar
 
 ignore:
   - README.md
+  - CURSEFORGE.md
 
 manual-changelog:
   filename: CHANGELOG.md
