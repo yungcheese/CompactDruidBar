@@ -223,7 +223,7 @@ end
 -- Page 1: General
 ------------------------------------------------------------------------
 local function BuildGeneral()
-  local panel, c = MakePage("Compact Druid Bar", 860)
+  local panel, c = MakePage("Compact Druid Bar", 1020)
   local function RowSize(row)
     return {
       get = function() return ns.db.iconSizes[row] end,
@@ -320,6 +320,18 @@ local function BuildGeneral()
       end)
     y = y - 24
   end
+
+  y = y - 10
+  Header(c, x, y, "Style")
+  y = y - 22
+  Dropdown(c, x, y, 200, function() return ns.STYLES end,
+    function() return db().style end,
+    function(v) db().style = v; ns:Refresh() end)
+  y = y - 28
+  Checkbox(c, x, y, "Combo points as gems", function() return db().gems end, function(v) db().gems = v end); y = y - 24
+  Checkbox(c, x, y, "Classic icon border", function() return db().iconBorder end, function(v) db().iconBorder = v end); y = y - 24
+  Checkbox(c, x, y, "Background panel", function() return db().panel end, function(v) db().panel = v end); y = y - 24
+  Checkbox(c, x, y, "Spark on bars", function() return db().barSpark end, function(v) db().barSpark = v end); y = y - 24
 
   y = y - 10
   Header(c, x, y, "Display")

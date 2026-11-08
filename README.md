@@ -18,6 +18,7 @@ A compact, fully scalable druid bar for **WoW Forever** (client 1.60.1, interfac
 - **Add your own spells** (cooldowns, buffs, debuffs per form) and hide built-in ones on the *Spells* options page
 - Only shows spells you know, so it grows with you while leveling
 - Dimmed out of combat
+- Four styles: Classic gold frame (default), Classic polished, Flat and Soft, with combo point gems, classic icon borders, background panel and bar sparks
 
 ## Installation
 Copy the `CompactDruidBar` folder to:

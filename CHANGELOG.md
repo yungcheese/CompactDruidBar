@@ -1,6 +1,8 @@
 # Changelog
 
 ## v1.0.2
+- New look: "Classic gold frame" style (default) with Blizzard bar textures, gold accents, combo point gems, classic icon borders, a background panel and bar sparks; Classic polished, Flat and Soft styles available in the options
+- New logo
 - Clearcasting sounds are now shipped with the addon (10 original alert sounds), so they work on every client; also shared with other addons through SharedMedia
 - Custom sound IDs report in chat when the client cannot play them
 - Separate icon size per row (debuffs, cooldowns, buffs); Ctrl+mouse wheel on a row while unlocked

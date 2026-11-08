@@ -38,6 +38,7 @@ Made for **WoW Forever** and its addon restrictions: it keeps working in combat 
 - **Add your own spells** (cooldowns, buffs, debuffs per form) and hide built-in ones
 
 **Layout**
+- Classic look by default: gold frame, Blizzard bar textures, combo point gems, classic icon borders; or pick Classic polished, Flat or Soft
 - One compact block, or detach any element and place it on its own
 - Scale the whole bar or each element separately (mouse wheel)
 - Snaps to the screen center, exact X/Y position in the options

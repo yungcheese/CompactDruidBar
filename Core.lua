@@ -44,6 +44,7 @@ local DEFAULTS = {
   ccSoundKey = "file:shimmer", ccSoundChannel = "Master",
   bleedWarn = true, consumables = true, cpGlow = true, gcdSpark = true,
   minimap = { hide = true, minimapPos = 220 }, -- same keys LibDBIcon uses
+  style = "gold", gems = true, iconBorder = true, panel = true, barSpark = true,
   iconSizes = { debuffs = 22, cooldowns = 22, buffs = 22 }, -- per icon row
   point = { "CENTER", "UIParent", "CENTER", 0, -160 },
   modules = {},
@@ -265,6 +266,29 @@ local function Pct(cur, max)
   end
 end
 
+------------------------------------------------------------------------
+-- Visual styles
+------------------------------------------------------------------------
+ns.STYLES = {
+  { "gold", "Classic gold frame" },
+  { "classic", "Classic polished" },
+  { "flat", "Flat" },
+  { "soft", "Soft" },
+}
+local STYLE = {
+  gold    = { tex = "Interface\\TargetingFrame\\UI-StatusBar", font = FONT, flags = "", shadow = true, accent = true, frame = true },
+  classic = { tex = "Interface\\TargetingFrame\\UI-StatusBar", font = FONT, flags = "", shadow = true, accent = true },
+  flat    = { tex = TEX, font = "Fonts\\ARIALN.TTF", flags = "OUTLINE" },
+  soft    = { tex = "Interface\\RaidFrame\\Raid-Bar-Hp-Fill", font = "Fonts\\ARIALN.TTF", flags = "OUTLINE" },
+}
+local GOLD = { 0.80, 0.63, 0.30 }
+local function Style() return STYLE[ns.db and ns.db.style] or STYLE.gold end
+local function IconBorderColor()
+  if ns.db and ns.db.iconBorder then return 0.78, 0.62, 0.28, 1 end
+  return 0, 0, 0, 1
+end
+ns.bars, ns.iconList = {}, {}
+
 local function CreateBar(parent)
   local holder = CreateFrame("Frame", nil, parent, "BackdropTemplate")
   holder:SetBackdrop({ bgFile = TEX, edgeFile = TEX, edgeSize = 1 })
@@ -280,12 +304,27 @@ local function CreateBar(parent)
   holder.textL = NewFS(bar, "LEFT");   holder.textL:SetPoint("LEFT", 3, 0)
   holder.textC = NewFS(bar, "CENTER"); holder.textC:SetPoint("CENTER", 0, 0)
   holder.textR = NewFS(bar, "RIGHT");  holder.textR:SetPoint("RIGHT", -3, 0)
+  -- Thin gold accent line around the bar (classic styles).
+  holder.accent = CreateFrame("Frame", nil, holder, "BackdropTemplate")
+  holder.accent:SetPoint("TOPLEFT", -1, 1)
+  holder.accent:SetPoint("BOTTOMRIGHT", 1, -1)
+  holder.accent:SetBackdrop({ edgeFile = TEX, edgeSize = 1 })
+  holder.accent:SetBackdropBorderColor(0.42, 0.33, 0.14, 1)
+  -- Spark at the end of the fill, like Blizzard's casting bar.
+  holder.spark = bar:CreateTexture(nil, "OVERLAY", nil, 6)
+  holder.spark:SetTexture("Interface\\CastingBar\\UI-CastingBar-Spark")
+  holder.spark:SetBlendMode("ADD")
+  holder.spark:Hide()
+  ns.bars[#ns.bars + 1] = holder
   return holder
 end
 
 local function SetBar(holder, cur, max)
   pcall(holder.bar.SetMinMaxValues, holder.bar, 0, max)
   pcall(holder.bar.SetValue, holder.bar, cur)
+  local show = ns.db.barSpark
+  if show and readable(cur, max) then show = cur and max and cur > 0 and cur < max end
+  holder.spark:SetShown(show and true or false)
 end
 
 local function CreateIcon(parent)
@@ -296,6 +335,15 @@ local function CreateIcon(parent)
   f.tex:SetPoint("TOPLEFT", 1, -1)
   f.tex:SetPoint("BOTTOMRIGHT", -1, 1)
   f.tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+  -- Soft gloss on the top half (classic icon border option).
+  f.gloss = f:CreateTexture(nil, "OVERLAY")
+  f.gloss:SetPoint("TOPLEFT", f.tex, "TOPLEFT")
+  f.gloss:SetPoint("BOTTOMRIGHT", f.tex, "RIGHT")
+  f.gloss:SetColorTexture(1, 1, 1, 1)
+  if not (CreateColor and pcall(f.gloss.SetGradient, f.gloss, "VERTICAL", CreateColor(1, 1, 1, 0), CreateColor(1, 1, 1, 0.22))) then
+    f.gloss:SetAlpha(0.08)
+  end
+  ns.iconList[#ns.iconList + 1] = f
   f.cd = CreateFrame("Cooldown", nil, f, "CooldownFrameTemplate")
   f.cd:SetAllPoints(f.tex)
   f.cd:SetDrawEdge(false)
@@ -327,7 +375,7 @@ local function SetIconState(icon, active, missingRed)
     icon:SetBackdropBorderColor(0.9, 0.1, 0.1, 1)
     icon.tex:SetVertexColor(1, 0.45, 0.45)
   else
-    icon:SetBackdropBorderColor(0, 0, 0, 1)
+    icon:SetBackdropBorderColor(IconBorderColor())
     icon.tex:SetVertexColor(1, 1, 1)
   end
 end
@@ -559,6 +607,19 @@ do
     s.fill:SetPoint("TOPLEFT", 1, -1)
     s.fill:SetPoint("BOTTOMRIGHT", -1, 1)
     s.fill:SetColorTexture(1, 0.75, 0.1)
+    -- Gem look: rotated squares (border, socket, gem, shine).
+    local function Gem(layer, r, g, b, a)
+      local t = s:CreateTexture(nil, layer)
+      t:SetTexture(TEX)
+      t:SetVertexColor(r, g, b, a or 1)
+      if t.SetRotation then t:SetRotation(math.pi / 4) end
+      t:SetPoint("CENTER")
+      return t
+    end
+    s.gemBorder = Gem("BACKGROUND", 0.05, 0.03, 0.01)
+    s.gemSocket = Gem("BORDER", 0.13, 0.10, 0.08)
+    s.gemOn     = Gem("ARTWORK", 1, 0.55, 0.1)
+    s.gemShine  = Gem("OVERLAY", 1, 0.9, 0.65, 0.75)
     m.segs[i] = s
   end
   -- Glow around the combo bar at 5 combo points (finisher time).
@@ -577,13 +638,27 @@ do
     m.glowAnim = ag
   end
   function m:Resize(w)
+    local gems = ns.db.gems
     local h, gap = ns.db.smallBarHeight, 2
+    if gems then h = math.max(10, ns.db.smallBarHeight + 6) end
     self.frame:SetSize(w, h)
     local segW = (w - gap * 4) / 5
+    local side = h * 0.70 -- rotated 45 degrees, so the diagonal fits the height
     for i, s in ipairs(self.segs) do
       s:ClearAllPoints()
       s:SetSize(segW, h)
       s:SetPoint("LEFT", self.frame, "LEFT", (i - 1) * (segW + gap), 0)
+      s:SetBackdropColor(0, 0, 0, gems and 0 or 0.55)
+      s:SetBackdropBorderColor(0, 0, 0, gems and 0 or 1)
+      s.gemBorder:SetSize(side, side)
+      s.gemSocket:SetSize(side - 2, side - 2)
+      s.gemOn:SetSize(side - 3, side - 3)
+      s.gemShine:SetSize(side * 0.32, side * 0.32)
+      s.gemShine:ClearAllPoints()
+      s.gemShine:SetPoint("CENTER", -side * 0.14, side * 0.14)
+      s.gemBorder:SetShown(gems)
+      s.gemSocket:SetShown(gems)
+      if not gems then s.gemOn:Hide(); s.gemShine:Hide() end
     end
   end
   function m:IsActive() return ns.form == "cat" end
@@ -596,11 +671,21 @@ do
   end
   function m:Update()
     local cp = GetCP()
+    local gems = ns.db.gems
+    local ok5, full5 = pcall(function() return cp >= 5 end)
+    full5 = ok5 and full5
     for i, s in ipairs(self.segs) do
       local ok, on = pcall(function() return cp >= i end)
-      s.fill:SetShown(ok and on)
-      local ok5, full = pcall(function() return cp >= 5 end)
-      if ok5 and full then s.fill:SetColorTexture(1, 0.3, 0.15) else s.fill:SetColorTexture(1, 0.75, 0.1) end
+      on = ok and on
+      if gems then
+        s.fill:Hide()
+        s.gemOn:SetShown(on)
+        s.gemShine:SetShown(on)
+        if full5 then s.gemOn:SetVertexColor(1, 0.25, 0.1) else s.gemOn:SetVertexColor(1, 0.55, 0.1) end
+      else
+        s.fill:SetShown(on)
+        if full5 then s.fill:SetColorTexture(1, 0.3, 0.15) else s.fill:SetColorTexture(1, 0.75, 0.1) end
+      end
     end
     local ok5, full = pcall(function() return cp >= 5 end)
     local glow = ns.db.cpGlow and ok5 and full
@@ -971,7 +1056,7 @@ do
       elseif ic.blinking then
         ic.blinking = nil
         ic:SetAlpha(1)
-        ic:SetBackdropBorderColor(0, 0, 0, 1)
+        ic:SetBackdropBorderColor(IconBorderColor())
       end
     end
   end)
@@ -1127,6 +1212,7 @@ do
   m.icon:SetPoint("TOP")
   m.icon.tex:SetTexture(SpellIcon(CLEARCASTING_ID) or 136170)
   m.icon:SetBackdropBorderColor(0.45, 0.92, 1, 1)
+  m.icon.keepBorder = true
   m.text = NewFS(m.frame, "CENTER")
   m.text:SetPoint("TOP", m.icon, "BOTTOM", 0, -1)
   m.text:SetText("CLEARCAST")
@@ -1156,6 +1242,12 @@ end
 ------------------------------------------------------------------------
 -- Clearcasting detection + flash/sound
 ------------------------------------------------------------------------
+-- Background panel / gold frame behind the attached elements.
+local panel = CreateFrame("Frame", "CompactDruidBarPanel", UIParent, "BackdropTemplate")
+panel:SetFrameStrata("LOW")
+panel:Hide()
+ns.panel = panel
+
 local flash = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
 flash:SetBackdrop({ edgeFile = TEX, edgeSize = 2 })
 flash:SetBackdropBorderColor(0.45, 0.92, 1, 1)
@@ -1417,7 +1509,29 @@ end
 function ns:Layout()
   local db = self.db
   if not db then return end
-  for _, fs in ipairs(self.fontStrings) do fs:SetFont(FONT, db.fontSize, "OUTLINE") end
+  -- Apply the visual style: fonts, bar textures, accents, sparks, icon borders.
+  local st = Style()
+  for _, fs in ipairs(self.fontStrings) do
+    if not fs:SetFont(st.font, db.fontSize, st.flags) then fs:SetFont(FONT, db.fontSize, "OUTLINE") end
+    if st.shadow then
+      fs:SetShadowOffset(1, -1)
+      fs:SetShadowColor(0, 0, 0, 1)
+    else
+      fs:SetShadowOffset(0, 0)
+    end
+  end
+  for _, h in ipairs(self.bars) do
+    local r, g, b = h.bar:GetStatusBarColor()
+    h.bar:SetStatusBarTexture(st.tex)
+    if r then h.bar:SetStatusBarColor(r, g, b) end
+    h.accent:SetShown(st.accent and true or false)
+    h.spark:ClearAllPoints()
+    h.spark:SetPoint("CENTER", h.bar:GetStatusBarTexture(), "RIGHT", 0, 0)
+  end
+  for _, ic in ipairs(self.iconList) do
+    if not ic.keepBorder then ic:SetBackdropBorderColor(IconBorderColor()) end
+    ic.gloss:SetShown(db.iconBorder and true or false)
+  end
 
   root:SetScale(db.scale)
   ApplyPoint(root, db.point)
@@ -1489,6 +1603,29 @@ function ns:Layout()
     end
   end
   root:SetSize(width, math.max(y - db.spacing, 1))
+
+  for _, h in ipairs(self.bars) do h.spark:SetSize(12, math.max(8, (h:GetHeight() or 10) * 2.2)) end
+
+  -- Background panel and/or gold frame around the attached elements.
+  if (db.panel or st.frame) and y > 0 then
+    local pad = st.frame and 8 or 4
+    panel:SetScale(db.scale)
+    panel:ClearAllPoints()
+    panel:SetPoint("TOPLEFT", root, "TOPLEFT", -pad, pad)
+    panel:SetPoint("BOTTOMRIGHT", root, "BOTTOMRIGHT", pad, -pad)
+    if st.frame then
+      panel:SetBackdrop({ bgFile = TEX, edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 14,
+        insets = { left = 3, right = 3, top = 3, bottom = 3 } })
+      panel:SetBackdropBorderColor(GOLD[1], GOLD[2], GOLD[3], 1)
+    else
+      panel:SetBackdrop({ bgFile = TEX, edgeFile = TEX, edgeSize = 1 })
+      panel:SetBackdropBorderColor(1, 1, 1, 0.08)
+    end
+    panel:SetBackdropColor(0, 0, 0, db.panel and 0.55 or 0)
+    panel:Show()
+  else
+    panel:Hide()
+  end
 
   flash:SetScale(db.scale)
   flash:ClearAllPoints()
@@ -1665,6 +1802,7 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
         end
         local a = ComputeAlpha()
         for _, key in ipairs(ns.MODULE_ORDER) do ns.modules[key].frame:SetAlpha(a) end
+        ns.panel:SetAlpha(a)
       end
       if ns.t2 >= 0.1 then
         ns.t2 = 0
