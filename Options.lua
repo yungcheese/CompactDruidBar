@@ -223,7 +223,7 @@ end
 -- Page 1: General
 ------------------------------------------------------------------------
 local function BuildGeneral()
-  local panel, c = MakePage("Compact Druid Bar", 1020)
+  local panel, c = MakePage("Compact Druid Bar", 1060)
   local function RowSize(row)
     return {
       get = function() return ns.db.iconSizes[row] end,
@@ -255,6 +255,7 @@ local function BuildGeneral()
     { "   Debuff icons", 10, 60, 1, RowSize("debuffs") },
     { "   Cooldown icons", 10, 60, 1, RowSize("cooldowns") },
     { "   Buff icons", 10, 60, 1, RowSize("buffs") },
+    { "Max icon lines (0 = fit width)", 0, 4, 1, "iconLines" },
     { "Font size", 6, 20, 1, "fontSize" },
     { "Spacing", 0, 12, 1, "spacing" },
     { "Out of combat opacity", 0, 1, 0.05, "oocAlpha", "%.2f" },

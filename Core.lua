@@ -38,7 +38,7 @@ ns.MODULE_LABELS = {
 local DEFAULTS = {
   locked = true,
   scale = 1, width = 170, barHeight = 14, smallBarHeight = 8, iconSize = 22,
-  fontSize = 10, spacing = 2, oocAlpha = 0.4,
+  fontSize = 10, spacing = 2, oocAlpha = 0.4, iconLines = 0,
   showText = true, energyTick = true, manaTicks = true, mergeIcons = true,
   ccGlow = true, ccSound = true, ccFlash = true,
   ccSoundKey = "file:shimmer", ccSoundChannel = "Master",
@@ -1589,6 +1589,7 @@ function ns:Layout()
   ApplyPoint(root, db.point)
 
   local y, width = 0, db.width
+  local rootW = width
   local flow = {}
   for _, key in ipairs(self.MODULE_ORDER) do
     local m, mdb = self.modules[key], db.modules[key]
@@ -1647,14 +1648,21 @@ function ns:Layout()
       return lines
     end
     local lines
-    for count = 1, #items do
-      lines = split(math.ceil(#items / count))
-      local fits = true
-      for _, l in ipairs(lines) do if l.w > width and #l > 1 then fits = false end end
-      if fits then break end
+    local maxLines = db.iconLines or 0
+    if maxLines > 0 then
+      -- Fixed number of lines: icons may stick out past the bar width.
+      lines = split(math.ceil(#items / math.min(maxLines, #items)))
+    else
+      for count = 1, #items do
+        lines = split(math.ceil(#items / count))
+        local fits = true
+        for _, l in ipairs(lines) do if l.w > width and #l > 1 then fits = false end end
+        if fits then break end
+      end
     end
+    for _, l in ipairs(lines) do rootW = math.max(rootW, l.w) end
     for _, l in ipairs(lines) do
-      local x = (width - l.w) / 2
+      local x = (rootW - l.w) / 2
       for n, it in ipairs(l) do
         if n > 1 then x = x + (l[n - 1].m == it.m and sp or gap) end
         it.x, it.y = x, y + (l.h - it.h) / 2
@@ -1683,7 +1691,7 @@ function ns:Layout()
       m:Place()
     end
   end
-  root:SetSize(width, math.max(y - db.spacing, 1))
+  root:SetSize(rootW, math.max(y - db.spacing, 1))
 
   for _, h in ipairs(self.bars) do h.spark:SetSize(12, math.max(8, (h:GetHeight() or 10) * 2.2)) end
 
