@@ -2095,7 +2095,7 @@ function ns:Debug()
     end)
     try("Faerie Fire IDs", function()
       print(("  Faerie Fire (Feral) ID: %s, Faerie Fire ID: %s, Pounce ID: %s"):format(
-        tostring(KnownID("ffFeral")), tostring(KnownID("ff")), tostring(KnownID("pounce"))))
+        tostring(KnownID("ffFeral") or "none"), tostring(KnownID("ff") or "none"), tostring(KnownID("pounce") or "none")))
     end)
     try("Tracked debuffs", function()
       local tracked = {}
@@ -2112,7 +2112,7 @@ function ns:Debug()
       print("  Debuff slots: " .. (#slots > 0 and table.concat(slots, ", ") or "none"))
     end)
     try("Target GUID", function() show("Target GUID", UnitGUID and UnitGUID("target")) end)
-    try("Cooldown", function() show("Cooldown Dash (start)", (GetCooldown(KnownID("dash") or 1850))) end)
+    try("Cooldown", function() show("Cooldown Dash (start)", (GetCooldown(KnownID("dash") or 1850)) or "none") end)
     try("Clearcasting", function() show("Clearcasting now", HasClearcasting()) end)
     try("Curves", function()
       local mm = ns.modules.mana
