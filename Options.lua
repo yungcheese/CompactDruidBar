@@ -119,6 +119,7 @@ function ns:BuildOptions()
   Checkbox(x, y, "Tekst op de bars", function() return db().showText end, function(v) db().showText = v end); y = y - 24
   Checkbox(x, y, "Energy-tick timer", function() return db().energyTick end, function(v) db().energyTick = v end); y = y - 24
   Checkbox(x, y, "Powershift-streepjes op mana", function() return db().manaTicks end, function(v) db().manaTicks = v end); y = y - 24
+  Checkbox(x, y, "Iconen samenvoegen op één regel", function() return db().mergeIcons end, function(v) db().mergeIcons = v end); y = y - 24
 
   y = y - 10
   Header(x, y, "Clearcasting")

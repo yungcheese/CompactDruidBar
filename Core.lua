@@ -39,7 +39,7 @@ local DEFAULTS = {
   locked = true,
   scale = 1, width = 170, barHeight = 14, smallBarHeight = 8, iconSize = 22,
   fontSize = 10, spacing = 2, oocAlpha = 0.4,
-  showText = true, energyTick = true, manaTicks = true,
+  showText = true, energyTick = true, manaTicks = true, mergeIcons = true,
   ccGlow = true, ccSound = true, ccFlash = true,
   point = { "CENTER", "UIParent", "CENTER", 0, -160 },
   modules = {},
@@ -118,7 +118,6 @@ local COOLDOWNS = {
 local BUFFS = {
   { key = "motw", reminder = true },
   { key = "thorns", reminder = true },
-  { key = "omen", reminder = true, needsKnown = true },
   { key = "tigers", needsKnown = true, forms = { cat = true } },
   { key = "grasp", needsKnown = true },
 }
@@ -317,11 +316,9 @@ do
     SetBar(self.bar, cur, max)
     local pct = Pct(cur, max)
     if pct then
-      SafeText(self.bar.textL, "%s / %s", Short(cur), Short(max))
-      SafeText(self.bar.textR, "%d%%", pct)
+      SafeText(self.bar.textC, "%s / %s (%d%%)", Short(cur), Short(max), pct)
     else
-      SafeText(self.bar.textL, "%s", cur)
-      self.bar.textR:SetText("")
+      SafeText(self.bar.textC, "%s / %s", cur, max)
     end
   end
 end
@@ -482,46 +479,56 @@ do
     local cur, max = UnitPower("player", 0), UnitPowerMax("player", 0)
     SetBar(self.bar, cur, max)
     local cost = ShiftCost()
-    if readable(cur, max, cost) and type(cost) == "number" and cost > 0 and max > 0 then
+    local costOK = readable(max, cost) and type(cost) == "number" and cost > 0 and type(max) == "number" and max > 0
+    -- Streepjes hebben alleen max + kosten nodig, dus die werken ook als je huidige mana afgeschermd is.
+    self:PlaceTicks(costOK and cost or 0, costOK and max or 0)
+    if costOK and readable(cur) then
       local n = math.floor(cur / cost)
-      SafeText(self.bar.textL, "x%d", n)
-      if n == 0 then self.bar.textL:SetTextColor(1, 0.3, 0.3) else self.bar.textL:SetTextColor(1, 1, 1) end
-      self:PlaceTicks(cost, max)
+      SafeText(self.bar.textC, "x%d   %d%%", n, Pct(cur, max) or 0)
+      if n == 0 then self.bar.textC:SetTextColor(1, 0.3, 0.3) else self.bar.textC:SetTextColor(1, 1, 1) end
     else
-      self.bar.textL:SetText("")
-      self:PlaceTicks(0, 0)
+      self.bar.textC:SetTextColor(1, 1, 1)
+      SafeText(self.bar.textC, "%s / %s", cur, max)
     end
-    local pct = Pct(cur, max)
-    if pct then SafeText(self.bar.textR, "%d%%", pct) else self.bar.textR:SetText("") end
   end
+  m.ShiftCost = ShiftCost
 end
 
 -- Generieke icon-rij ------------------------------------------------
 local function IconRow(key)
   local m = NewModule(key)
-  m.icons, m.count = {}, 0
+  m.icons, m.count, m.isIconRow = {}, 0, true
   function m:GetIcon(i)
     if not self.icons[i] then self.icons[i] = CreateIcon(self.frame) end
     return self.icons[i]
   end
+  function m:ContentWidth()
+    if self.count == 0 then return 0 end
+    local s, g = ns.db.iconSize, ns.db.spacing
+    return self.count * s + (self.count - 1) * g
+  end
+  function m:IsActive() return self.count > 0 end
   function m:Resize(w)
     self.frame:SetSize(w, ns.db.iconSize)
     self:Place()
   end
+  -- Iconen gecentreerd binnen het frame.
   function m:Place()
     local s, g = ns.db.iconSize, ns.db.spacing
+    local off = math.max(0, (self.frame:GetWidth() - self:ContentWidth()) / 2)
     for i, ic in ipairs(self.icons) do
       ic:SetSize(s, s)
       ic:ClearAllPoints()
-      ic:SetPoint("LEFT", self.frame, "LEFT", (i - 1) * (s + g), 0)
+      ic:SetPoint("LEFT", self.frame, "LEFT", off + (i - 1) * (s + g), 0)
       ic:SetShown(i <= self.count)
       StyleCooldownText(ic)
     end
   end
   function m:SetCount(n)
     for i = 1, n do self:GetIcon(i) end
+    local changed = n ~= self.count
     self.count = n
-    self:Place()
+    if changed and ns.db then ns:Layout() else self:Place() end
   end
   return m
 end
@@ -844,6 +851,7 @@ function ns:Layout()
   ApplyPoint(root, db.point)
 
   local y, width = 0, db.width
+  local flow = {}
   for _, key in ipairs(self.MODULE_ORDER) do
     local m, mdb = self.modules[key], db.modules[key]
     local f = m.frame
@@ -857,6 +865,9 @@ function ns:Layout()
       f:SetScale(db.scale)
       if key == "clearcast" then
         f:SetPoint("TOPRIGHT", root, "TOPLEFT", -4, 0)
+      elseif m.isIconRow and db.mergeIcons and shown then
+        flow[#flow + 1] = m -- wordt hieronder samen op één regel gezet
+        f:SetPoint("TOP", root, "TOP", 0, 0)
       elseif shown then
         f:SetPoint("TOP", root, "TOP", 0, -y)
         y = y + f:GetHeight() + db.spacing
@@ -870,6 +881,37 @@ function ns:Layout()
     mv:SetShown(not db.locked and mdb.enabled)
     if mdb.detached then mv.bg:SetColorTexture(1, 0.55, 0.1, 0.4) else mv.bg:SetColorTexture(0.1, 0.6, 1, 0.35) end
     mv.label:SetText(self.MODULE_LABELS[key] .. (mdb.detached and " (los)" or ""))
+  end
+
+  -- Icon-groepen (debuffs, cooldowns, buffs) naast elkaar, gecentreerd;
+  -- alleen naar een nieuwe regel als het niet meer in de breedte past.
+  if #flow > 0 then
+    local s, gap = db.iconSize, db.spacing + 6
+    local rows, row, rowW = {}, {}, 0
+    for _, m in ipairs(flow) do
+      local cw = m:ContentWidth()
+      if cw == 0 then cw = s * 2 end -- leeg (alleen bij ontgrendeld)
+      local add = (#row > 0 and gap or 0) + cw
+      if #row > 0 and rowW + add > width then
+        rows[#rows + 1] = { items = row, w = rowW }
+        row, rowW, add = {}, 0, cw
+      end
+      row[#row + 1] = { m = m, w = cw }
+      rowW = rowW + add
+    end
+    rows[#rows + 1] = { items = row, w = rowW }
+    for _, r in ipairs(rows) do
+      local x = (width - r.w) / 2
+      for _, it in ipairs(r.items) do
+        local f = it.m.frame
+        f:SetWidth(it.w)
+        f:ClearAllPoints()
+        f:SetPoint("TOPLEFT", root, "TOPLEFT", x, -y)
+        it.m:Place()
+        x = x + it.w + gap
+      end
+      y = y + s + db.spacing
+    end
   end
   root:SetSize(width, math.max(y - db.spacing, 1))
 
@@ -1042,9 +1084,28 @@ SlashCmdList.COMPACTDRUIDBAR = function(msg)
     print("|cff4fe8ffCompact Druid Bar|r: posities en schaal gereset.")
   elseif cmd == "test" then
     ns:TestClearcast()
+  elseif cmd == "debug" then
+    local function show(label, v)
+      local state = readable(v) and tostring(v) or "AFGESCHERMD"
+      print(("  %s: %s"):format(label, state))
+    end
+    print("|cff4fe8ffCompact Druid Bar debug|r (secret-API: " .. tostring(issecretvalue ~= nil) .. ", in combat: " .. tostring(UnitAffectingCombat("player")) .. ")")
+    show("Health", UnitHealth("player"))
+    show("Health max", UnitHealthMax("player"))
+    show("Power type", UnitPowerType("player"))
+    show("Energy", UnitPower("player", 3))
+    show("Mana", UnitPower("player", 0))
+    show("Mana max", UnitPowerMax("player", 0))
+    show("Combo points", UnitPower("player", 4))
+    show("Shift-kosten", ns.modules.mana.ShiftCost())
+    show("Form", ns.form)
+    local a = ScanAuras("player", "HELPFUL")[1]
+    if a then show("Eerste buff spellId", a.spellId) else print("  Eerste buff: geen/onleesbaar") end
+    local t = UnitExists("target") and ScanAuras("target", "HARMFUL|PLAYER")[1]
+    if t then show("Eerste target-debuff spellId", t.spellId) else print("  Target-debuff: geen") end
   elseif cmd == "" or cmd == "config" or cmd == "options" then
     if ns.OpenOptions then ns:OpenOptions() end
   else
-    print("|cff4fe8ffCompact Druid Bar|r: /cdb (opties), /cdb unlock, /cdb lock, /cdb scale 1.2, /cdb reset, /cdb test")
+    print("|cff4fe8ffCompact Druid Bar|r: /cdb (opties), /cdb unlock, /cdb lock, /cdb scale 1.2, /cdb reset, /cdb test, /cdb debug")
   end
 end
