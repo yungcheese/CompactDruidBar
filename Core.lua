@@ -759,6 +759,9 @@ local DEBUFF_DURATION = { rip = 12, rake = 9, pounce = 18, ffFeral = 40, ff = 40
 local DURATION_OVERRIDE = { [8921] = 9 }                       -- Moonfire rank 1
 local CAST_KEY = { [9005] = "pounce", [9823] = "pounce", [9827] = "pounce" } -- Pounce casts -> bleed
 ns.casts = {}                                                  -- key -> { start, dur, guid }
+-- Own buffs on yourself are blocked in combat too; time them from the cast.
+local BUFF_DURATION = { tigers = 6, grasp = 45 }
+ns.buffCasts = {}                                              -- key -> { start, dur }
 
 local function TargetGUID()
   local g = UnitGUID and UnitGUID("target")
@@ -769,6 +772,11 @@ function ns:TrackCast(spellID)
   self.lastCastID = spellID
   if not readable(spellID) or not spellID then return end
   local key = CAST_KEY[spellID] or SPELL_TO_KEY[spellID]
+  if key and BUFF_DURATION[key] then
+    self.buffCasts[key] = { start = GetTime(), dur = BUFF_DURATION[key] }
+    self.modules.buffs:Update()
+    return
+  end
   local dur = key and (DURATION_OVERRIDE[spellID] or DEBUFF_DURATION[key])
   if not dur then return end
   self.casts[key] = { start = GetTime(), dur = dur, guid = TargetGUID() }
@@ -984,9 +992,21 @@ do
   function m:Update()
     if not self.slots then self:Rebuild() end
     local auras, err = ScanAuras("player", "HELPFUL")
-    if AurasUnknown(auras, err) then return end -- unreadable in combat: keep the previous state
+    if AurasUnknown(auras, err) then
+      -- Unreadable in combat: keep the previous state, but show tracked casts (Tiger's Fury etc.).
+      self:ShowFromCasts()
+      return
+    end
     local byKey, byId, byName = IndexAuras(auras)
     if not byKey then return end -- secret: keep the previous state
+    -- Readable: remember real timers so they carry into combat.
+    wipe(ns.buffCasts)
+    for k in pairs(BUFF_DURATION) do
+      local a = byKey[k]
+      if a and readable(a.expirationTime, a.duration) and a.duration and a.duration > 0 then
+        ns.buffCasts[k] = { start = a.expirationTime - a.duration, dur = a.duration }
+      end
+    end
     self:SetCount(#self.slots)
     for i, slot in ipairs(self.slots) do
       local ic, a = self.icons[i], nil
@@ -1006,6 +1026,34 @@ do
       end
     end
   end
+  -- Only touches slots we track by cast; all other buffs keep their last known state.
+  function m:ShowFromCasts()
+    local now = GetTime()
+    for i, slot in ipairs(self.slots) do
+      local t = slot.key and ns.buffCasts[slot.key]
+      local ic = self.icons[i]
+      if ic and t and t.start + t.dur > now then
+        ic.tex:SetTexture(slot.icon)
+        SetIconState(ic, true)
+        ic.cd:SetReverse(true)
+        ic.cd:SetCooldown(t.start, t.dur)
+        StyleCooldownText(ic)
+        ic.expires, ic.fromCast = t.start + t.dur, true
+      end
+    end
+  end
+  -- Dim a tracked buff again when its timer runs out.
+  m.frame:SetScript("OnUpdate", function()
+    local now = GetTime()
+    for i = 1, m.count do
+      local ic, slot = m.icons[i], m.slots and m.slots[i]
+      if ic.fromCast and ic.expires and now >= ic.expires then
+        ic.fromCast, ic.expires = nil, nil
+        SetIconState(ic, false, slot and slot.reminder)
+        ic.cd:Clear()
+      end
+    end
+  end)
 end
 
 -- Clearcasting icon ------------------------------------------------
