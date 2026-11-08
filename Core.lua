@@ -41,7 +41,7 @@ local DEFAULTS = {
   fontSize = 10, spacing = 2, oocAlpha = 0.4,
   showText = true, energyTick = true, manaTicks = true, mergeIcons = true,
   ccGlow = true, ccSound = true, ccFlash = true,
-  ccSoundKey = "kit:ALARM_CLOCK_WARNING_3", ccSoundChannel = "Master",
+  ccSoundKey = "kit:UI_POWER_AURA_GENERIC", ccSoundChannel = "Master",
   bleedWarn = true, consumables = true, cpGlow = true, gcdSpark = true,
   minimap = { hide = true, minimapPos = 220 }, -- same keys LibDBIcon uses
   point = { "CENTER", "UIParent", "CENTER", 0, -160 },
@@ -753,6 +753,28 @@ end
 
 local BLEEDS = { rip = true, rake = true }
 
+-- Cast tracking: Forever blocks target auras in combat, so we time our own
+-- debuffs from our casts (like the old Classic WeakAuras did).
+local DEBUFF_DURATION = { rip = 12, rake = 9, pounce = 18, ffFeral = 40, ff = 40, demo = 30, moonfire = 12, swarm = 12 }
+local DURATION_OVERRIDE = { [8921] = 9 }                       -- Moonfire rank 1
+local CAST_KEY = { [9005] = "pounce", [9823] = "pounce", [9827] = "pounce" } -- Pounce casts -> bleed
+ns.casts = {}                                                  -- key -> { start, dur, guid }
+
+local function TargetGUID()
+  local g = UnitGUID and UnitGUID("target")
+  if g and readable(g) then return g end
+end
+
+function ns:TrackCast(spellID)
+  self.lastCastID = spellID
+  if not readable(spellID) or not spellID then return end
+  local key = CAST_KEY[spellID] or SPELL_TO_KEY[spellID]
+  local dur = key and (DURATION_OVERRIDE[spellID] or DEBUFF_DURATION[key])
+  if not dur then return end
+  self.casts[key] = { start = GetTime(), dur = dur, guid = TargetGUID() }
+  self.modules.debuffs:Update()
+end
+
 -- Target debuffs ----------------------------------------------------
 do
   local m = IconRow("debuffs")
@@ -775,10 +797,23 @@ do
     if not self.slots then self:Rebuild() end
     local auras, err = {}, nil
     if UnitExists("target") then auras, err = ScanAuras("target", "HARMFUL|PLAYER") end
-    -- Same target, in combat, nothing readable: keep the current icons/timers.
-    if UnitExists("target") and not self.targetChanged and AurasUnknown(auras, err) then return end
     self.targetChanged = nil
+    -- In combat Forever blocks target auras: show our own tracked casts instead.
+    if UnitExists("target") and AurasUnknown(auras, err) then
+      self:ShowFromCasts()
+      return
+    end
     local byKey, byId, byName = IndexAuras(auras)
+    if byKey then
+      -- Readable (out of combat): remember real timers so they carry into combat.
+      local guid = TargetGUID()
+      wipe(ns.casts)
+      for k, a in pairs(byKey) do
+        if DEBUFF_DURATION[k] and readable(a.expirationTime, a.duration) and a.duration and a.duration > 0 then
+          ns.casts[k] = { start = a.expirationTime - a.duration, dur = a.duration, guid = guid }
+        end
+      end
+    end
 
     if not byKey then
       -- Fallback: IDs are secret -> just show all of your debuffs on the target.
@@ -818,12 +853,44 @@ do
       end
     end
   end
+  function m:ShowFromCasts()
+    local guid, now = TargetGUID(), GetTime()
+    self:SetCount(#self.slots)
+    for i, slot in ipairs(self.slots) do
+      if not slot.custom then -- custom debuffs have no known duration: leave as they are
+        local ic, t = self.icons[i], nil
+        for _, k in ipairs(slot.keys) do
+          local c = ns.casts[k]
+          if c and (not c.guid or not guid or c.guid == guid) and c.start + c.dur > now then t = t or c end
+        end
+        ic.warn = slot.warn
+        ic.tex:SetTexture(slot.icon)
+        if t then
+          SetIconState(ic, true)
+          ic.cd:SetReverse(true)
+          ic.cd:SetCooldown(t.start, t.dur)
+          StyleCooldownText(ic)
+          ic.expires, ic.fromCast = t.start + t.dur, true
+        else
+          SetIconState(ic, false)
+          ic.cd:Clear()
+          ic.expires, ic.fromCast = nil, nil
+        end
+      end
+    end
+  end
+
   -- Bleed refresh warning: Rip/Rake icon blinks red during its last 2 seconds.
   m.frame:SetScript("OnUpdate", function()
     if not ns.db then return end
     local now = GetTime()
     for i = 1, m.count do
       local ic = m.icons[i]
+      if ic.fromCast and ic.expires and now >= ic.expires then
+        -- Tracked debuff ran out: dim the icon again.
+        ic.fromCast, ic.expires = nil, nil
+        SetIconState(ic, false)
+      end
       local left = ic.expires and (ic.expires - now)
       if ns.db.bleedWarn and ic.warn and left and left > 0 and left < 2 then
         ic:SetAlpha(0.35 + 0.65 * math.abs(math.sin(now * 8)))
@@ -1014,22 +1081,19 @@ end
 -- Sounds: built-in SoundKits, LibSharedMedia sounds (if another addon
 -- provides them) and a custom SoundKit ID / FileDataID (wago.tools/sounds).
 ------------------------------------------------------------------------
+-- Only kits that exist in the running client are offered.
 local SOUNDKIT_CHOICES = {
-  { "ALARM_CLOCK_WARNING_3", "Alarm clock" },
-  { "ALARM_CLOCK_WARNING_2", "Alarm clock (soft)" },
+  { "UI_POWER_AURA_GENERIC", "Spell proc (Blizzard)" },
   { "RAID_WARNING", "Raid warning" },
-  { "READY_CHECK", "Ready check" },
-  { "UI_RAID_BOSS_WHISPER_WARNING", "Boss whisper" },
-  { "TELL_MESSAGE", "Whisper" },
-  { "MAP_PING", "Map ping" },
-  { "IG_PLAYER_INVITE", "Invite" },
-  { "PVP_THROUGH_QUEUE", "Queue pop" },
-  { "AUCTION_WINDOW_OPEN", "Auction open" },
+  { "UI_RAID_BOSS_WHISPER_WARNING", "Boss emote" },
+  { "ALARM_CLOCK_WARNING_3", "Alarm" },
+  { "ALARM_CLOCK_WARNING_2", "Alarm (soft)" },
+  { "UI_EPICLOOT_TOAST", "Epic loot" },
+  { "UI_LEGENDARY_LOOT_TOAST", "Legendary loot" },
+  { "UI_WORLDQUEST_COMPLETE", "World quest complete" },
+  { "UI_BNET_TOAST", "Toast" },
   { "LEVELUP", "Level up" },
-  { "UI_BNET_TOAST", "Battle.net toast" },
-  { "IG_QUEST_LIST_COMPLETE", "Quest complete" },
-  { "IG_ABILITY_PAGE_TURN", "Page turn" },
-  { "GS_TITLE_OPTION_OK", "Click" },
+  { "MAP_PING", "Map ping" },
 }
 
 -- Returns a list of { key, label }. Keys: "kit:NAME", "lsm:Name", "custom".
@@ -1360,7 +1424,7 @@ local function TryRegister(event, ...)
 end
 
 ev:RegisterEvent("ADDON_LOADED")
-ev:SetScript("OnEvent", function(_, event, arg1)
+ev:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
   if event == "ADDON_LOADED" then
     if arg1 ~= ADDON then return end
     local _, class = UnitClass("player")
@@ -1427,6 +1491,8 @@ ev:SetScript("OnEvent", function(_, event, arg1)
       ns.modules.debuffs:Update()
     end
   elseif event == "PLAYER_TARGET_CHANGED" then
+    -- Without a readable GUID we can't tell targets apart: forget tracked casts.
+    if not TargetGUID() then wipe(ns.casts) end
     ns.modules.debuffs.targetChanged = true
     ns.modules.debuffs:Update()
     ns.modules.combo:Update()
@@ -1436,6 +1502,7 @@ ev:SetScript("OnEvent", function(_, event, arg1)
     ns.modules.power:OnPower()
   elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
     ns.modules.power:OnCast()
+    ns:TrackCast(arg3)
   elseif event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" then
     ns.modules.buffs:Update()
     ns.modules.debuffs:Update()
@@ -1602,7 +1669,7 @@ function ns:Debug()
       local state = readable(v) and tostring(v) or "SECRET"
       print(("  %s: %s"):format(label, state))
     end
-    print("|cff4fe8ffCompact Druid Bar debug|r build 5 (secret-API: " .. tostring(issecretvalue ~= nil) .. ", in combat: " .. tostring(UnitAffectingCombat("player")) .. ")")
+    print("|cff4fe8ffCompact Druid Bar debug|r build 6 (secret-API: " .. tostring(issecretvalue ~= nil) .. ", in combat: " .. tostring(UnitAffectingCombat("player")) .. ")")
     show("Health", UnitHealth("player"))
     show("Health max", UnitHealthMax("player"))
     show("Power type", UnitPowerType("player"))
@@ -1626,6 +1693,8 @@ function ns:Debug()
       print("  Target: none")
     end
     show("Claw cost (clearcast fallback)", PowerCost(KnownID("claw") or 1082))
+    show("Last cast spellID (debuff tracking)", ns.lastCastID)
+    show("Target GUID", UnitGUID and UnitGUID("target"))
     local function try(label, fn)
       local ok, err = pcall(fn)
       if not ok then print("  " .. label .. ": ERROR " .. tostring(err)) end
