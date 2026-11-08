@@ -14,7 +14,7 @@ A compact, fully scalable druid bar for **WoW Forever** (client 1.60.1, interfac
 - **Rip/Rake refresh warning**: the icon blinks red during its last 2 seconds
 - **Mana consumables**: cooldown and count of your best mana potion and Demonic/Dark Rune
 - **Glow at 5 combo points** and a **GCD spark** on the power bar
-- **Choose your clearcasting sound**: 10 alert sounds included with the addon, SharedMedia sounds from other addons, or any SoundKit/FileDataID
+- **Choose your clearcasting sound**: the original Blizzard Clearcasting sound (default), 10 alert sounds included with the addon, SharedMedia sounds from other addons, or any SoundKit/FileDataID
 - **Add your own spells** (cooldowns, buffs, debuffs per form) and hide built-in ones on the *Spells* options page
 - Only shows spells you know, so it grows with you while leveling
 - Dimmed out of combat

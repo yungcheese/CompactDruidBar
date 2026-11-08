@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.0.3
+- The original Blizzard Clearcasting proc sound is back (also the druid alert variant) and is now the default sound
+- Icons of the merged rows are spread evenly over the lines (e.g. 8 icons become 4 + 4 instead of three lines)
+- New "Max icon lines" option: keep your icon size and let the lines stick out past the bar width
+- Options split into clear pages with sections: General, Layout, Look, Alerts and Spells
+- Tip on the Alerts page: the alert volume follows the chosen sound channel
+
 ## v1.0.2
 - Combo points moved to the top of the bar
 - "Alarm" game sound is back, and the original Blizzard spell proc sound is offered when SpellActivationOverlay is installed

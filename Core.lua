@@ -41,7 +41,7 @@ local DEFAULTS = {
   fontSize = 10, spacing = 2, oocAlpha = 0.4, iconLines = 0,
   showText = true, energyTick = true, manaTicks = true, mergeIcons = true,
   ccGlow = true, ccSound = true, ccFlash = true,
-  ccSoundKey = "file:shimmer", ccSoundChannel = "Master",
+  ccSoundKey = "fid:569649", ccSoundChannel = "Master",
   bleedWarn = true, consumables = true, cpGlow = true, gcdSpark = true,
   minimap = { hide = true, minimapPos = 220 }, -- same keys LibDBIcon uses
   style = "gold", gems = true, iconBorder = true, panel = true, barSpark = true,
