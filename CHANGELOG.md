@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.2
+- Faerie Fire (Feral) and Pounce are now recognized by name, so they work even when the client uses different spell IDs
+
 ## v1.0.1
 - Fixed the Faerie Fire (Feral) name on the Spells options page
 

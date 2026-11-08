@@ -130,12 +130,44 @@ local BUFFS = {
 local function IsKnown(id)
   return (IsPlayerSpell and IsPlayerSpell(id)) or (IsSpellKnown and IsSpellKnown(id)) or false
 end
+-- Spells whose IDs differ on some clients: also look them up by name in the spellbook.
+local NAME_ALIASES = {
+  ffFeral = { "Faerie Fire (Feral)" },
+  pounce = { "Pounce" }, -- S.pounce holds the bleed debuff IDs, the castable spell is found by name
+}
 local function KnownID(key)
   local ids = S[key]
   if not ids then return end
   for i = #ids, 1, -1 do
     if IsKnown(ids[i]) then return ids[i] end
   end
+  for _, name in ipairs(NAME_ALIASES[key] or {}) do
+    local info = C_Spell and C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(name)
+    if type(info) == "table" and info.spellID then
+      -- Remember this client's ID so auras and casts with it are recognized too.
+      SPELL_TO_KEY[info.spellID] = SPELL_TO_KEY[info.spellID] or key
+      return info.spellID
+    end
+  end
+end
+
+-- Name -> key lookup, for spell IDs we don't know (other ranks or client-specific IDs).
+local NAME_TO_KEY
+local function KeyFromName(name)
+  if not name or not readable(name) then return end
+  if not NAME_TO_KEY then
+    NAME_TO_KEY = {}
+    for key, aliases in pairs(NAME_ALIASES) do
+      for _, n in ipairs(aliases) do NAME_TO_KEY[n] = key end
+    end
+    for key, ids in pairs(S) do
+      for _, id in ipairs(ids) do
+        local n = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(id)
+        if n and not NAME_TO_KEY[n] then NAME_TO_KEY[n] = key end
+      end
+    end
+  end
+  return NAME_TO_KEY[name]
 end
 local function SpellIcon(id)
   if C_Spell and C_Spell.GetSpellTexture then return C_Spell.GetSpellTexture(id) end
@@ -175,10 +207,12 @@ function ns.SpellName(id)
 end
 function ns.KeyName(key)
   if key == "ffFeral" then
-    -- Some clients name every rank just "Faerie Fire"; add "(Feral)" ourselves.
-    local n = ns.SpellName(770) or "Faerie Fire"
-    return n .. " (Feral)"
+    local id = KnownID("ffFeral")
+    local n = id and ns.SpellName(id)
+    if n and n:find("Feral") then return n end
+    return (ns.SpellName(770) or "Faerie Fire") .. " (Feral)"
   end
+  if key == "pounce" then return ns.SpellName(9005) or "Pounce" end
   for _, id in ipairs(S[key] or {}) do
     local n = ns.SpellName(id)
     if n then return n end
@@ -742,7 +776,7 @@ local function IndexAuras(auras)
   local byKey, byId, byName = {}, {}, {}
   for _, a in ipairs(auras) do
     if not readable(a.spellId) then return nil end -- IDs are secret
-    local k = SPELL_TO_KEY[a.spellId]
+    local k = SPELL_TO_KEY[a.spellId] or KeyFromName(a.name)
     if k then byKey[k] = byKey[k] or a end
     byId[a.spellId] = a
     if readable(a.name) and a.name then byName[a.name] = a end
@@ -794,7 +828,7 @@ end
 function ns:TrackCast(spellID)
   self.lastCastID = spellID
   if not readable(spellID) or not spellID then return end
-  local key = CAST_KEY[spellID] or SPELL_TO_KEY[spellID]
+  local key = CAST_KEY[spellID] or SPELL_TO_KEY[spellID] or KeyFromName(ns.SpellName(spellID))
   if key and BUFF_DURATION[key] then
     self.buffCasts[key] = { start = GetTime(), dur = BUFF_DURATION[key] }
     self.modules.buffs:Update()
@@ -1776,7 +1810,7 @@ function ns:Debug()
       local state = readable(v) and tostring(v) or "SECRET"
       print(("  %s: %s"):format(label, state))
     end
-    print("|cff4fe8ffCompact Druid Bar debug|r build 6 (secret-API: " .. tostring(issecretvalue ~= nil) .. ", in combat: " .. tostring(UnitAffectingCombat("player")) .. ")")
+    print("|cff4fe8ffCompact Druid Bar debug|r build 7 (secret-API: " .. tostring(issecretvalue ~= nil) .. ", in combat: " .. tostring(UnitAffectingCombat("player")) .. ")")
     show("Health", UnitHealth("player"))
     show("Health max", UnitHealthMax("player"))
     show("Power type", UnitPowerType("player"))
@@ -1801,6 +1835,11 @@ function ns:Debug()
     end
     show("Claw cost (clearcast fallback)", PowerCost(KnownID("claw") or 1082))
     show("Last cast spellID (debuff tracking)", ns.lastCastID)
+    if ns.lastCastID and readable(ns.lastCastID) then
+      print(("  Last cast: %s -> %s"):format(tostring(ns.SpellName(ns.lastCastID)),
+        tostring(CAST_KEY[ns.lastCastID] or SPELL_TO_KEY[ns.lastCastID] or KeyFromName(ns.SpellName(ns.lastCastID)) or "not tracked")))
+    end
+    print(("  Faerie Fire (Feral) ID: %s, Pounce ID: %s"):format(tostring(KnownID("ffFeral")), tostring(KnownID("pounce"))))
     show("Target GUID", UnitGUID and UnitGUID("target"))
     local function try(label, fn)
       local ok, err = pcall(fn)
