@@ -1226,9 +1226,27 @@ end
 ------------------------------------------------------------------------
 -- Layout, moving, scaling, detaching
 ------------------------------------------------------------------------
+-- Save a frame's position relative to the screen center (in the frame's own
+-- scale units), snapping to the exact center line when within SNAP pixels.
+local SNAP = 12
 local function SavePoint(frame)
-  local p, _, rp, x, y = frame:GetPoint()
-  return { p, "UIParent", rp, x, y }
+  local fx, fy = frame:GetCenter()
+  local ux, uy = UIParent:GetCenter()
+  local r = UIParent:GetEffectiveScale() / frame:GetEffectiveScale()
+  local x, y = fx - ux * r, fy - uy * r
+  if math.abs(x) < SNAP then x = 0 end
+  if math.abs(y) < SNAP then y = 0 end
+  return { "CENTER", "UIParent", "CENTER", math.floor(x + 0.5), math.floor(y + 0.5) }
+end
+
+-- Convert an older saved anchor to the center-based format.
+function ns:NormalizePoint()
+  if root:GetCenter() then self.db.point = SavePoint(root) end
+end
+
+function ns:SetBarPosition(x, y)
+  self.db.point = { "CENTER", "UIParent", "CENTER", x or 0, y or 0 }
+  self:Layout()
 end
 
 local function ApplyPoint(frame, p)
@@ -1276,6 +1294,7 @@ local function CreateMover(m)
     if f == root then ns.db.point = SavePoint(root) else ns.db.modules[m.key].point = SavePoint(f) end
     ns.moving = nil
     ns:Layout()
+    if ns.RefreshOptions then ns.RefreshOptions() end
   end)
   mv:SetScript("OnMouseUp", function(_, btn)
     if btn == "RightButton" and ns.db.modules[m.key].detached then ns:Attach(m) end
@@ -1433,10 +1452,11 @@ function ns:RemoveCustom(index)
   self:Refresh()
 end
 
-function ns:SetLocked(locked)
+function ns:SetLocked(locked, quiet)
   self.db.locked = locked
   self:Layout()
   if self.RefreshOptions then self.RefreshOptions() end
+  if quiet then return end
   print("|cff4fe8ffCompact Druid Bar|r: " .. (locked and "locked." or "unlocked. Drag to move, Shift+drag to detach, scroll to scale."))
 end
 
@@ -1502,6 +1522,22 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
     ns.db = CopyDefaults(DEFAULTS, CompactDruidBarDB)
     for _, key in ipairs(ns.MODULE_ORDER) do CreateMover(ns.modules[key]) end
     if ns.BuildOptions then ns:BuildOptions() end
+
+    -- Blizzard Edit Mode open = bar unlocked, closed = locked again.
+    if EditModeManagerFrame and EditModeManagerFrame.HookScript then
+      EditModeManagerFrame:HookScript("OnShow", function()
+        if ns.db.locked then
+          ns.editModeUnlocked = true
+          ns:SetLocked(false, true)
+        end
+      end)
+      EditModeManagerFrame:HookScript("OnHide", function()
+        if ns.editModeUnlocked then
+          ns.editModeUnlocked = nil
+          ns:SetLocked(true, true)
+        end
+      end)
+    end
 
     TryRegister("PLAYER_ENTERING_WORLD")
     TryRegister("UPDATE_SHAPESHIFT_FORM")

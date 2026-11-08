@@ -255,6 +255,30 @@ local function BuildGeneral()
   Button(c, 16, y, 140, "Reset positions", function() ns:ResetPositions(); ns.RefreshOptions() end)
   Button(c, 162, y, 120, "Reset all", function() ns:ResetAll(); ns.RefreshOptions() end)
 
+  -- Exact position (offset from screen center); Enter applies.
+  y = y - 34
+  Text(c, 16, y - 4, "Position X:")
+  local ex = EditBox(c, 80, y, 46)
+  Text(c, 138, y - 4, "Y:")
+  local ey = EditBox(c, 152, y, 46)
+  local function ApplyPos()
+    local px, py = tonumber(ex:GetText()), tonumber(ey:GetText())
+    if px and py then ns:SetBarPosition(px, py) end
+    ns.RefreshOptions()
+  end
+  ex:SetScript("OnEnterPressed", function(self) self:ClearFocus(); ApplyPos() end)
+  ey:SetScript("OnEnterPressed", function(self) self:ClearFocus(); ApplyPos() end)
+  Button(c, 214, y, 68, "Center", function()
+    ns:SetBarPosition(0, db().point[5])
+    ns.RefreshOptions()
+  end)
+  OnRefresh(function()
+    local p = db().point
+    if p[1] ~= "CENTER" or p[3] ~= "CENTER" then ns:NormalizePoint(); p = db().point end
+    if not ex:HasFocus() then ex:SetText(tostring(p[4])) end
+    if not ey:HasFocus() then ey:SetText(tostring(p[5])) end
+  end)
+
   y = y - 40
   Header(c, x, y, "Extras")
   y = y - 20
