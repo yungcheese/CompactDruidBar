@@ -462,7 +462,8 @@ local function BuildSpells()
       if sp.forms.cat then forms[#forms + 1] = "Cat" end
       if sp.forms.bear then forms[#forms + 1] = "Bear" end
       if sp.forms.caster then forms[#forms + 1] = "Caster" end
-      r.icon:SetTexture((C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(sp.id)) or 134400)
+      local okTex, tex = pcall(function() return C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(sp.id) end)
+      r.icon:SetTexture((okTex and tex) or 134400)
       r.text:SetText(("%s |cff888888(%d)|r - %s - %s"):format(sp.name or "?", sp.id, ns.KIND_LABELS[sp.kind] or sp.kind, table.concat(forms, ", ")))
       r.del:SetScript("OnClick", function() ns:RemoveCustom(i); ns.RefreshOptions() end)
       r:Show()

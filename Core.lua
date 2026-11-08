@@ -129,8 +129,15 @@ local BUFFS = {
   { key = "grasp", needsKnown = true },
 }
 
+-- Spell APIs can throw for IDs that don't exist on this client (e.g. Classic IDs
+-- missing on WoW Forever), so every lookup is guarded.
+local function SafeCall(fn, ...)
+  if not fn then return end
+  local ok, a, b = pcall(fn, ...)
+  if ok then return a, b end
+end
 local function IsKnown(id)
-  return (IsPlayerSpell and IsPlayerSpell(id)) or (IsSpellKnown and IsSpellKnown(id)) or false
+  return SafeCall(IsPlayerSpell, id) or SafeCall(IsSpellKnown, id) or false
 end
 -- Spells whose IDs differ on some clients: also look them up by name in the spellbook.
 local NAME_ALIASES = {
@@ -144,7 +151,7 @@ local function KnownID(key)
     if IsKnown(ids[i]) then return ids[i] end
   end
   for _, name in ipairs(NAME_ALIASES[key] or {}) do
-    local info = C_Spell and C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(name)
+    local info = C_Spell and SafeCall(C_Spell.GetSpellInfo, name)
     if type(info) == "table" and info.spellID then
       -- Remember this client's ID so auras and casts with it are recognized too.
       SPELL_TO_KEY[info.spellID] = SPELL_TO_KEY[info.spellID] or key
@@ -164,7 +171,7 @@ local function KeyFromName(name)
     end
     for key, ids in pairs(S) do
       for _, id in ipairs(ids) do
-        local n = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(id)
+        local n = C_Spell and SafeCall(C_Spell.GetSpellName, id)
         if n and not NAME_TO_KEY[n] then NAME_TO_KEY[n] = key end
       end
     end
@@ -177,8 +184,8 @@ local function KeyFromName(name)
   end
 end
 local function SpellIcon(id)
-  if C_Spell and C_Spell.GetSpellTexture then return C_Spell.GetSpellTexture(id) end
-  if GetSpellTexture then return GetSpellTexture(id) end
+  if C_Spell and C_Spell.GetSpellTexture then return (SafeCall(C_Spell.GetSpellTexture, id)) end
+  return (SafeCall(GetSpellTexture, id))
 end
 local function PowerCost(id)
   if not id then return end
@@ -209,8 +216,8 @@ ns.BUILTIN = {
   { cat = "Buffs", keys = { "motw", "thorns", "tigers" } },
 }
 function ns.SpellName(id)
-  if C_Spell and C_Spell.GetSpellName then return C_Spell.GetSpellName(id) end
-  if GetSpellInfo then return (GetSpellInfo(id)) end
+  if C_Spell and C_Spell.GetSpellName then return (SafeCall(C_Spell.GetSpellName, id)) end
+  return (SafeCall(GetSpellInfo, id))
 end
 function ns.KeyName(key)
   if key == "ffFeral" then
@@ -1696,7 +1703,7 @@ function ns:AddCustom(input, kind, forms)
   if id then
     name = ns.SpellName(id)
   elseif C_Spell and C_Spell.GetSpellInfo then
-    local info = C_Spell.GetSpellInfo(input)
+    local info = SafeCall(C_Spell.GetSpellInfo, input)
     if type(info) == "table" then id, name = info.spellID, info.name end
   elseif GetSpellInfo then
     local n, _, _, _, _, _, sid = GetSpellInfo(input)
@@ -2050,7 +2057,12 @@ function ns:Debug()
       local state = readable(v) and tostring(v) or "SECRET"
       print(("  %s: %s"):format(label, state))
     end
-    print("|cff4fe8ffCompact Druid Bar debug|r build 9 (secret-API: " .. tostring(issecretvalue ~= nil) .. ", in combat: " .. tostring(UnitAffectingCombat("player")) .. ")")
+    -- Every block is guarded: one failing lookup must not hide the rest.
+    local function try(label, fn)
+      local ok, err = pcall(fn)
+      if not ok then print("  " .. label .. ": ERROR " .. tostring(err)) end
+    end
+    print("|cff4fe8ffCompact Druid Bar debug|r build 10 (secret-API: " .. tostring(issecretvalue ~= nil) .. ", in combat: " .. tostring(UnitAffectingCombat("player")) .. ")")
     show("Health", UnitHealth("player"))
     show("Health max", UnitHealthMax("player"))
     show("Power type", UnitPowerType("player"))
@@ -2075,27 +2087,31 @@ function ns:Debug()
     end
     show("Claw cost (clearcast fallback)", PowerCost(KnownID("claw") or 1082))
     show("Last cast spellID (debuff tracking)", ns.lastCastID)
-    if ns.lastCastID and readable(ns.lastCastID) then
-      print(("  Last cast: %s -> %s"):format(tostring(ns.SpellName(ns.lastCastID)),
-        tostring(CAST_KEY[ns.lastCastID] or SPELL_TO_KEY[ns.lastCastID] or KeyFromName(ns.SpellName(ns.lastCastID)) or "not tracked")))
-    end
-    print(("  Faerie Fire (Feral) ID: %s, Faerie Fire ID: %s, Pounce ID: %s"):format(
-      tostring(KnownID("ffFeral")), tostring(KnownID("ff")), tostring(KnownID("pounce"))))
-    local tracked = {}
-    for k, c in pairs(ns.casts) do
-      tracked[#tracked + 1] = ("%s %.0fs"):format(k, math.max(0, c.start + c.dur - GetTime()))
-    end
-    print("  Tracked debuffs: " .. (#tracked > 0 and table.concat(tracked, ", ") or "none"))
-    local slots = {}
-    for _, slot in ipairs(ns.modules.debuffs.slots or {}) do
-      slots[#slots + 1] = slot.custom and ("custom:" .. tostring(slot.custom.name)) or table.concat(slot.keys, "/")
-    end
-    print("  Debuff slots: " .. (#slots > 0 and table.concat(slots, ", ") or "none"))
-    show("Target GUID", UnitGUID and UnitGUID("target"))
-    local function try(label, fn)
-      local ok, err = pcall(fn)
-      if not ok then print("  " .. label .. ": ERROR " .. tostring(err)) end
-    end
+    try("Last cast", function()
+      if ns.lastCastID and readable(ns.lastCastID) then
+        print(("  Last cast: %s -> %s"):format(tostring(ns.SpellName(ns.lastCastID)),
+          tostring(CAST_KEY[ns.lastCastID] or SPELL_TO_KEY[ns.lastCastID] or KeyFromName(ns.SpellName(ns.lastCastID)) or "not tracked")))
+      end
+    end)
+    try("Faerie Fire IDs", function()
+      print(("  Faerie Fire (Feral) ID: %s, Faerie Fire ID: %s, Pounce ID: %s"):format(
+        tostring(KnownID("ffFeral")), tostring(KnownID("ff")), tostring(KnownID("pounce"))))
+    end)
+    try("Tracked debuffs", function()
+      local tracked = {}
+      for k, c in pairs(ns.casts) do
+        tracked[#tracked + 1] = ("%s %ds"):format(k, math.floor(math.max(0, c.start + c.dur - GetTime())))
+      end
+      print("  Tracked debuffs: " .. (#tracked > 0 and table.concat(tracked, ", ") or "none"))
+    end)
+    try("Debuff slots", function()
+      local slots = {}
+      for _, slot in ipairs(ns.modules.debuffs.slots or {}) do
+        slots[#slots + 1] = slot.custom and ("custom:" .. tostring(slot.custom.name)) or table.concat(slot.keys, "/")
+      end
+      print("  Debuff slots: " .. (#slots > 0 and table.concat(slots, ", ") or "none"))
+    end)
+    try("Target GUID", function() show("Target GUID", UnitGUID and UnitGUID("target")) end)
     try("Cooldown", function() show("Cooldown Dash (start)", (GetCooldown(KnownID("dash") or 1850))) end)
     try("Clearcasting", function() show("Clearcasting now", HasClearcasting()) end)
     try("Curves", function()
@@ -2105,9 +2121,11 @@ function ns:Debug()
         mm.shiftBroken and " (FAILED)" or ""))
     end)
     print("  UnitHealthPercent: " .. tostring(UnitHealthPercent ~= nil))
-    local pw, ph = ns.panel:GetSize()
-    print(("  Style: %s, panel option: %s, panel shown: %s, visible: %s, size: %dx%d, alpha: %.2f"):format(
-      tostring(ns.db.style), tostring(ns.db.panel), tostring(ns.panel:IsShown()), tostring(ns.panel:IsVisible()),
-      pw or 0, ph or 0, ns.panel:GetEffectiveAlpha() or 0))
+    try("Panel", function()
+      local pw, ph = ns.panel:GetSize()
+      print(("  Style: %s, panel option: %s, panel shown: %s, visible: %s, size: %dx%d, alpha: %.2f"):format(
+        tostring(ns.db.style), tostring(ns.db.panel), tostring(ns.panel:IsShown()), tostring(ns.panel:IsVisible()),
+        math.floor(pw or 0), math.floor(ph or 0), ns.panel:GetEffectiveAlpha() or 0))
+    end)
     print(("  Energy tick known: %s"):format(tostring(ns.modules.power.lastTick > 0)))
 end
