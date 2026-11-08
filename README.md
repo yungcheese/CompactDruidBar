@@ -1,5 +1,7 @@
 # Compact Druid Bar
 
+<img src="media/logo-512.png" alt="Compact Druid Bar logo" width="128">
+
 A compact, fully scalable druid bar for **WoW Forever** (client 1.60.1, interface 16001). Built for feral powershifting, but it adapts to every form.
 
 ## Features

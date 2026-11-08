@@ -3,6 +3,7 @@ package-as: CompactDruidBar
 ignore:
   - README.md
   - CURSEFORGE.md
+  - media
 
 manual-changelog:
   filename: CHANGELOG.md
