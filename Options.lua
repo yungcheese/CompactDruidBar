@@ -1,5 +1,5 @@
 -- Compact Druid Bar - options panel (Esc > Options > AddOns > Compact Druid Bar, or /cdb)
--- Two pages: General (layout, display, alerts) and Spells (custom + built-in spells).
+-- Pages: General (main), Layout, Look, Alerts and Spells (custom + built-in spells).
 
 local ADDON, ns = ...
 
@@ -220,65 +220,50 @@ local function Dropdown(parent, x, y, w, getList, get, set, preview)
 end
 
 ------------------------------------------------------------------------
--- Page 1: General
+-- Section header: title with a thin gold line underneath.
+local function Section(parent, x, y, w, title)
+  Header(parent, x, y, title)
+  local line = parent:CreateTexture(nil, "ARTWORK")
+  line:SetColorTexture(1, 0.82, 0, 0.35)
+  line:SetPoint("TOPLEFT", x, y - 16)
+  line:SetSize(w, 1)
+  return y - 26
+end
+
+local function db() return ns.db end
+local function Flag(key) return function() return db()[key] end, function(v) db()[key] = v end end
+
+local function PageTitle(c, title, subtitle)
+  Text(c, 16, -16, title, "GameFontNormalLarge")
+  local sub = Text(c, 16, -40, subtitle)
+  sub:SetWidth(620)
+  sub:SetTextColor(0.75, 0.75, 0.75)
+end
+
+local L, R, COLW = 16, 340, 290
+
+------------------------------------------------------------------------
+-- Page 1: General (main category)
 ------------------------------------------------------------------------
 local function BuildGeneral()
-  local panel, c = MakePage("Compact Druid Bar", 1060)
-  local function RowSize(row)
-    return {
-      get = function() return ns.db.iconSizes[row] end,
-      set = function(v) ns.db.iconSizes[row] = v end,
-    }
-  end
-  local db = function() return ns.db end
+  local panel, c = MakePage("Compact Druid Bar", 560)
+  PageTitle(c, "Compact Druid Bar",
+    "Unlock to move. Drag moves the bar, Shift+drag detaches an element, right-click attaches it again, mouse wheel scales. More settings in the sub-pages: Layout, Look, Alerts and Spells.")
 
-  Text(c, 16, -16, "Compact Druid Bar", "GameFontNormalLarge")
-  local sub = Text(c, 16, -40, "Unlock to move. Drag moves the bar, Shift+drag detaches an element, right-click attaches it again, mouse wheel scales.")
-  sub:SetWidth(620)
-
-  -- Left column: size
-  local x, y = 16, -70
-  Header(c, x, y, "Size")
-  y = y - 20
-  local sliders = {
-    { "Scale (bar)", 0.3, 3, 0.05, "scale", "%.2f" },
-    { "Width", 80, 400, 5, "width" },
-    { "Main bar height", 4, 40, 1, "barHeight" },
-    { "Combo/mana bar height", 2, 30, 1, "smallBarHeight" },
-    { "Icon size (all rows)", 10, 60, 1, {
-      get = function() return ns.db.iconSize end,
-      set = function(v)
-        ns.db.iconSize = v
-        for k in pairs(ns.db.iconSizes) do ns.db.iconSizes[k] = v end
-        ns.RefreshOptions()
-      end } },
-    { "   Debuff icons", 10, 60, 1, RowSize("debuffs") },
-    { "   Cooldown icons", 10, 60, 1, RowSize("cooldowns") },
-    { "   Buff icons", 10, 60, 1, RowSize("buffs") },
-    { "Max icon lines (0 = fit width)", 0, 4, 1, "iconLines" },
-    { "Font size", 6, 20, 1, "fontSize" },
-    { "Spacing", 0, 12, 1, "spacing" },
-    { "Out of combat opacity", 0, 1, 0.05, "oocAlpha", "%.2f" },
-  }
-  for _, sl in ipairs(sliders) do
-    Slider(c, x, y, sl[1], sl[2], sl[3], sl[4], sl[5], sl[6])
-    y = y - 42
-  end
-
-  y = y - 6
-  local lockBtn = Button(c, 16, y, 140, "", function() ns:SetLocked(not db().locked) end)
+  -- Left: controls and position
+  local y = Section(c, L, -80, COLW, "Bar")
+  local lockBtn = Button(c, L, y, 140, "", function() ns:SetLocked(not db().locked) end)
   OnRefresh(function() lockBtn:SetText(db().locked and "Unlock" or "Lock") end)
-  Button(c, 162, y, 120, "Test clearcast", function() ns:TestClearcast() end)
+  Button(c, L + 146, y, 140, "Test clearcast", function() ns:TestClearcast() end)
   y = y - 28
-  Button(c, 16, y, 140, "Reset positions", function() ns:ResetPositions(); ns.RefreshOptions() end)
-  Button(c, 162, y, 120, "Reset all", function() ns:ResetAll(); ns.RefreshOptions() end)
+  Button(c, L, y, 140, "Reset positions", function() ns:ResetPositions(); ns.RefreshOptions() end)
+  Button(c, L + 146, y, 140, "Reset all", function() ns:ResetAll(); ns.RefreshOptions() end)
 
-  -- Exact position (offset from screen center); Enter applies.
-  y = y - 34
-  Text(c, 16, y - 4, "Position X:")
-  local ex = EditBox(c, 80, y, 46)
-  Text(c, 138, y - 4, "Y:")
-  local ey = EditBox(c, 152, y, 46)
+  y = Section(c, L, y - 40, COLW, "Position")
+  Text(c, L, y - 4, "X:")
+  local ex = EditBox(c, L + 16, y, 50)
+  Text(c, L + 84, y - 4, "Y:")
+  local ey = EditBox(c, L + 100, y, 50)
   local function ApplyPos()
     local px, py = tonumber(ex:GetText()), tonumber(ey:GetText())
     if px and py then ns:SetBarPosition(px, py) end
@@ -286,7 +271,7 @@ local function BuildGeneral()
   end
   ex:SetScript("OnEnterPressed", function(self) self:ClearFocus(); ApplyPos() end)
   ey:SetScript("OnEnterPressed", function(self) self:ClearFocus(); ApplyPos() end)
-  Button(c, 214, y, 68, "Center", function()
+  Button(c, L + 170, y, 116, "Center", function()
     ns:SetBarPosition(0, db().point[5])
     ns.RefreshOptions()
   end)
@@ -296,89 +281,156 @@ local function BuildGeneral()
     if not ex:HasFocus() then ex:SetText(tostring(p[4])) end
     if not ey:HasFocus() then ey:SetText(tostring(p[5])) end
   end)
+  local hint = Text(c, L, y - 26, "Offset from the screen center; press Enter to apply.")
+  hint:SetTextColor(0.6, 0.6, 0.6)
 
-  y = y - 40
-  Header(c, x, y, "Extras")
-  y = y - 20
-  Checkbox(c, x, y, "Rip/Rake refresh warning (last 2 sec)", function() return db().bleedWarn end, function(v) db().bleedWarn = v end); y = y - 24
-  Checkbox(c, x, y, "Mana potion + rune cooldowns", function() return db().consumables end, function(v) db().consumables = v end); y = y - 24
-  Checkbox(c, x, y, "Glow at 5 combo points", function() return db().cpGlow end, function(v) db().cpGlow = v end); y = y - 24
-  Checkbox(c, x, y, "GCD spark on power bar", function() return db().gcdSpark end, function(v) db().gcdSpark = v end); y = y - 24
+  y = Section(c, L, y - 56, COLW, "Minimap")
+  Checkbox(c, L, y, "Show minimap button", function() return not db().minimap.hide end,
+    function(v) db().minimap.hide = not v; ns:UpdateMinimap() end)
 
-  -- Right column: elements, display, clearcasting
-  x, y = 320, -70
-  Header(c, x, y, "Elements")
-  Text(c, x + 190, y, "Detach", "GameFontNormalSmall")
-  y = y - 20
+  -- Right: elements
+  y = Section(c, R, -80, COLW, "Elements")
+  Text(c, R + 220, y + 8, "Detach", "GameFontNormalSmall")
   for _, key in ipairs(ns.MODULE_ORDER) do
-    Checkbox(c, x, y, ns.MODULE_LABELS[key],
+    Checkbox(c, R, y, ns.MODULE_LABELS[key],
       function() return db().modules[key].enabled end,
       function(v) db().modules[key].enabled = v end)
-    Checkbox(c, x + 186, y, "",
+    Checkbox(c, R + 224, y, "",
       function() return db().modules[key].detached end,
       function(v)
         if v then ns:Detach(ns.modules[key]) else ns:Attach(ns.modules[key]) end
       end)
     y = y - 24
   end
+  return panel
+end
 
-  y = y - 10
-  Header(c, x, y, "Style")
-  y = y - 22
-  Dropdown(c, x, y, 200, function() return ns.STYLES end,
+------------------------------------------------------------------------
+-- Page: Layout (sizes)
+------------------------------------------------------------------------
+local function BuildLayout()
+  local panel, c = MakePage("Layout", 480)
+  PageTitle(c, "Layout", "Sizes of the bars and icons. Ctrl+mouse wheel over an icon row (while unlocked) also changes that row's icon size.")
+  local function RowSize(row)
+    return { get = function() return db().iconSizes[row] end, set = function(v) db().iconSizes[row] = v end }
+  end
+  local function Sliders(x, y, list)
+    for _, sl in ipairs(list) do
+      Slider(c, x, y, sl[1], sl[2], sl[3], sl[4], sl[5], sl[6])
+      y = y - 42
+    end
+    return y
+  end
+
+  local y = Section(c, L, -80, COLW, "Bars")
+  y = Sliders(L, y, {
+    { "Scale", 0.3, 3, 0.05, "scale", "%.2f" },
+    { "Width", 80, 400, 5, "width" },
+    { "Main bar height", 4, 40, 1, "barHeight" },
+    { "Combo/mana bar height", 2, 30, 1, "smallBarHeight" },
+    { "Spacing", 0, 12, 1, "spacing" },
+  })
+  y = Section(c, L, y - 6, COLW, "Text & visibility")
+  Sliders(L, y, {
+    { "Font size", 6, 20, 1, "fontSize" },
+    { "Out of combat opacity", 0, 1, 0.05, "oocAlpha", "%.2f" },
+  })
+
+  y = Section(c, R, -80, COLW, "Icon size")
+  y = Sliders(R, y, {
+    { "All rows", 10, 60, 1, {
+      get = function() return db().iconSize end,
+      set = function(v)
+        db().iconSize = v
+        for k in pairs(db().iconSizes) do db().iconSizes[k] = v end
+        ns.RefreshOptions()
+      end } },
+    { "Debuffs", 10, 60, 1, RowSize("debuffs") },
+    { "Cooldowns", 10, 60, 1, RowSize("cooldowns") },
+    { "Buffs", 10, 60, 1, RowSize("buffs") },
+  })
+  y = Section(c, R, y - 6, COLW, "Icon arrangement")
+  Checkbox(c, R, y, "Merge icon rows together", Flag("mergeIcons")); y = y - 30
+  Sliders(R, y, { { "Max lines (0 = fit bar width)", 0, 4, 1, "iconLines" } })
+  return panel
+end
+
+------------------------------------------------------------------------
+-- Page: Look (style and what is shown on the bars)
+------------------------------------------------------------------------
+local function BuildLook()
+  local panel, c = MakePage("Look", 420)
+  PageTitle(c, "Look", "Visual style and the extra information drawn on the bars.")
+
+  local y = Section(c, L, -80, COLW, "Style")
+  Dropdown(c, L, y, 220, function() return ns.STYLES end,
     function() return db().style end,
     function(v) db().style = v; ns:Refresh() end)
-  y = y - 28
-  Checkbox(c, x, y, "Combo points as gems", function() return db().gems end, function(v) db().gems = v end); y = y - 24
-  Checkbox(c, x, y, "Classic icon border", function() return db().iconBorder end, function(v) db().iconBorder = v end); y = y - 24
-  Checkbox(c, x, y, "Background panel", function() return db().panel end, function(v) db().panel = v end); y = y - 24
-  Checkbox(c, x, y, "Spark on bars", function() return db().barSpark end, function(v) db().barSpark = v end); y = y - 24
+  y = y - 30
+  Checkbox(c, L, y, "Combo points as gems", Flag("gems")); y = y - 24
+  Checkbox(c, L, y, "Classic icon border", Flag("iconBorder")); y = y - 24
+  Checkbox(c, L, y, "Background panel", Flag("panel")); y = y - 24
+  Checkbox(c, L, y, "Spark on bars", Flag("barSpark")); y = y - 24
 
-  y = y - 10
-  Header(c, x, y, "Display")
-  y = y - 20
-  Checkbox(c, x, y, "Text on bars", function() return db().showText end, function(v) db().showText = v end); y = y - 24
-  Checkbox(c, x, y, "Energy tick timer", function() return db().energyTick end, function(v) db().energyTick = v end); y = y - 24
-  Checkbox(c, x, y, "Powershift marks on mana", function() return db().manaTicks end, function(v) db().manaTicks = v end); y = y - 24
-  Checkbox(c, x, y, "Merge icons onto one line", function() return db().mergeIcons end, function(v) db().mergeIcons = v end); y = y - 24
-  Checkbox(c, x, y, "Show minimap button", function() return not db().minimap.hide end,
-    function(v) db().minimap.hide = not v; ns:UpdateMinimap() end); y = y - 24
+  y = Section(c, R, -80, COLW, "On the bars")
+  Checkbox(c, R, y, "Text on bars", Flag("showText")); y = y - 24
+  Checkbox(c, R, y, "Energy tick timer", Flag("energyTick")); y = y - 24
+  Checkbox(c, R, y, "GCD spark on power bar", Flag("gcdSpark")); y = y - 24
+  Checkbox(c, R, y, "Powershift marks on mana", Flag("manaTicks")); y = y - 24
+  Checkbox(c, R, y, "Glow at 5 combo points", Flag("cpGlow")); y = y - 24
 
-  y = y - 10
-  Header(c, x, y, "Clearcasting")
-  y = y - 20
-  Checkbox(c, x, y, "Highlight energy bar", function() return db().ccGlow end, function(v) db().ccGlow = v end); y = y - 24
-  Checkbox(c, x, y, "Border flash", function() return db().ccFlash end, function(v) db().ccFlash = v end); y = y - 24
-  Checkbox(c, x, y, "Sound", function() return db().ccSound end, function(v) db().ccSound = v end); y = y - 28
+  y = Section(c, R, y - 14, COLW, "Extra icons")
+  Checkbox(c, R, y, "Mana potion + rune cooldowns", Flag("consumables"))
+  return panel
+end
 
-  -- Sound picker
-  local afterX = Dropdown(c, x, y, 200, ns.GetSoundChoices,
+------------------------------------------------------------------------
+-- Page: Alerts (clearcasting and warnings)
+------------------------------------------------------------------------
+local function BuildAlerts()
+  local panel, c = MakePage("Alerts", 420)
+  PageTitle(c, "Alerts", "How Clearcasting procs and refresh warnings get your attention.")
+
+  local y = Section(c, L, -80, COLW, "Clearcasting")
+  Checkbox(c, L, y, "Highlight energy bar", Flag("ccGlow")); y = y - 24
+  Checkbox(c, L, y, "Border flash", Flag("ccFlash")); y = y - 24
+  Checkbox(c, L, y, "Play a sound", Flag("ccSound")); y = y - 34
+  Button(c, L, y, 140, "Test clearcast", function() ns:TestClearcast() end)
+
+  y = Section(c, L, y - 40, COLW, "Warnings")
+  Checkbox(c, L, y, "Rip/Rake refresh warning (last 2 sec)", Flag("bleedWarn"))
+
+  y = Section(c, R, -80, COLW, "Sound")
+  Text(c, R, y - 4, "Sound:")
+  local afterX = Dropdown(c, R + 60, y, 170, ns.GetSoundChoices,
     function() return db().ccSoundKey end,
     function(v) db().ccSoundKey = v; ns.RefreshOptions() end,
     function(key) ns:PlayAlertSound(key, true) end)
   Button(c, afterX + 6, y, 50, "Play", function() ns:PlayAlertSound(nil, true) end)
-  y = y - 28
+  y = y - 30
 
-  local customLabel = Text(c, x, y - 4, "Sound ID:")
-  local custom = EditBox(c, x + 60, y, 90)
+  local customLabel = Text(c, R, y - 4, "Sound ID:")
+  local custom = EditBox(c, R + 60, y, 90)
   custom:SetNumeric(true)
   custom:SetScript("OnTextChanged", function(self) db().ccSoundCustom = self:GetText() end)
   custom:SetScript("OnEnterPressed", function(self) self:ClearFocus(); ns:PlayAlertSound("custom", true) end)
-  local hint = Text(c, x + 166, y - 4, "SoundKit or FileDataID (wago.tools/sounds)")
-  hint:SetTextColor(0.6, 0.6, 0.6)
+  local idHint = Text(c, R + 166, y - 4, "SoundKit or FileDataID")
+  idHint:SetTextColor(0.6, 0.6, 0.6)
   OnRefresh(function()
     local show = db().ccSoundKey == "custom"
-    customLabel:SetShown(show); custom:SetShown(show); hint:SetShown(show)
+    customLabel:SetShown(show); custom:SetShown(show); idHint:SetShown(show)
     if not custom:HasFocus() then custom:SetText(db().ccSoundCustom or "") end
   end)
-  y = y - 28
+  y = y - 30
 
-  Text(c, x, y - 4, "Channel:")
-  Dropdown(c, x + 60, y, 120,
+  Text(c, R, y - 4, "Channel:")
+  Dropdown(c, R + 60, y, 170,
     function() return { { "Master", "Master" }, { "SFX", "Effects" }, { "Ambience", "Ambience" }, { "Dialog", "Dialog" } } end,
     function() return db().ccSoundChannel end,
     function(v) db().ccSoundChannel = v end)
-
+  local volHint = Text(c, R, y - 30, "Volume follows this channel's slider in the game's sound settings. Tip: pick Dialog or Ambience and raise that slider to make the alert louder than other effects.")
+  volHint:SetWidth(COLW)
+  volHint:SetTextColor(0.6, 0.6, 0.6)
   return panel
 end
 
@@ -498,19 +550,25 @@ end
 ------------------------------------------------------------------------
 function ns:BuildOptions()
   local general = BuildGeneral()
+  local subs = { BuildLayout(), BuildLook(), BuildAlerts() }
   local spells = BuildSpells()
+  subs[#subs + 1] = spells
   if Settings and Settings.RegisterCanvasLayoutCategory then
     local cat = Settings.RegisterCanvasLayoutCategory(general, general.name)
     Settings.RegisterAddOnCategory(cat)
     ns.category = cat
     if Settings.RegisterCanvasLayoutSubcategory then
-      local ok, sub = pcall(Settings.RegisterCanvasLayoutSubcategory, cat, spells, spells.name)
-      if ok then ns.spellsCategory = sub end
+      for _, p in ipairs(subs) do
+        local ok, sub = pcall(Settings.RegisterCanvasLayoutSubcategory, cat, p, p.name)
+        if ok and p == spells then ns.spellsCategory = sub end
+      end
     end
   elseif InterfaceOptions_AddCategory then
     InterfaceOptions_AddCategory(general)
-    spells.parent = general.name
-    InterfaceOptions_AddCategory(spells)
+    for _, p in ipairs(subs) do
+      p.parent = general.name
+      InterfaceOptions_AddCategory(p)
+    end
   end
   ns.optionsPanel, ns.spellsPanel = general, spells
 end
