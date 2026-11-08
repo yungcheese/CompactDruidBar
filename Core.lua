@@ -851,17 +851,24 @@ local function IconRow(key)
   end
   function m:IsActive() return self.count > 0 end
   function m:Resize(w)
+    self.flowPos = nil
     self.frame:SetSize(w, self:Size())
     self:Place()
   end
-  -- Icons centered inside the frame.
+  -- Icons centered inside the frame, or at the positions computed by the
+  -- shared icon flow (self.flowPos) when the rows are merged.
   function m:Place()
     local s, g = self:Size(), ns.db.spacing
     local off = math.max(0, (self.frame:GetWidth() - self:ContentWidth()) / 2)
     for i, ic in ipairs(self.icons) do
       ic:SetSize(s, s)
       ic:ClearAllPoints()
-      ic:SetPoint("LEFT", self.frame, "LEFT", off + (i - 1) * (s + g), 0)
+      local fp = self.flowPos and self.flowPos[i]
+      if fp then
+        ic:SetPoint("TOPLEFT", self.frame, "TOPLEFT", fp[1], -fp[2])
+      else
+        ic:SetPoint("LEFT", self.frame, "LEFT", off + (i - 1) * (s + g), 0)
+      end
       ic:SetShown(i <= self.count)
       StyleCooldownText(ic)
     end
@@ -1614,37 +1621,66 @@ function ns:Layout()
     mv.label:SetText(self.MODULE_LABELS[key] .. (mdb.detached and " (detached)" or ""))
   end
 
-  -- Icon groups (debuffs, cooldowns, buffs) side by side, centered;
-  -- only wrap to a new line when they no longer fit the width.
+  -- Icon groups (debuffs, cooldowns, buffs) flow together icon by icon,
+  -- spread evenly over as few lines as fit the width (e.g. 8 icons -> 4 + 4
+  -- instead of 3 groups on 3 lines). A group may continue on the next line.
   if #flow > 0 then
-    local gap = db.spacing + 6
-    local rows, row, rowW, rowH = {}, {}, 0, 0
+    local gap, sp = db.spacing + 6, db.spacing
+    local items = {}
     for _, m in ipairs(flow) do
-      local s = m:Size()
-      local cw = m:ContentWidth()
-      if cw == 0 then cw = s * 2 end -- empty (only while unlocked)
-      local add = (#row > 0 and gap or 0) + cw
-      if #row > 0 and rowW + add > width then
-        rows[#rows + 1] = { items = row, w = rowW, h = rowH }
-        row, rowW, rowH, add = {}, 0, 0, cw
+      local sz = m:Size()
+      if m.count == 0 then
+        items[#items + 1] = { m = m, w = sz * 2, h = sz } -- empty placeholder (unlocked)
+      else
+        for i = 1, m.count do items[#items + 1] = { m = m, i = i, w = sz, h = sz } end
       end
-      row[#row + 1] = { m = m, w = cw, h = s }
-      rowW = rowW + add
-      rowH = math.max(rowH, s)
     end
-    rows[#rows + 1] = { items = row, w = rowW, h = rowH }
-    for _, r in ipairs(rows) do
-      local x = (width - r.w) / 2
-      for _, it in ipairs(r.items) do
-        local f = it.m.frame
-        f:SetSize(it.w, it.h)
-        f:ClearAllPoints()
-        -- Smaller rows are centered vertically on the line.
-        f:SetPoint("TOPLEFT", root, "TOPLEFT", x, -(y + (r.h - it.h) / 2))
-        it.m:Place()
-        x = x + it.w + gap
+    local function split(per)
+      local lines, line = {}, nil
+      for n, it in ipairs(items) do
+        if (n - 1) % per == 0 then line = { w = 0, h = 0 }; lines[#lines + 1] = line end
+        if #line > 0 then line.w = line.w + (line[#line].m == it.m and sp or gap) end
+        line[#line + 1] = it
+        line.w = line.w + it.w
+        line.h = math.max(line.h, it.h)
       end
-      y = y + r.h + db.spacing
+      return lines
+    end
+    local lines
+    for count = 1, #items do
+      lines = split(math.ceil(#items / count))
+      local fits = true
+      for _, l in ipairs(lines) do if l.w > width and #l > 1 then fits = false end end
+      if fits then break end
+    end
+    for _, l in ipairs(lines) do
+      local x = (width - l.w) / 2
+      for n, it in ipairs(l) do
+        if n > 1 then x = x + (l[n - 1].m == it.m and sp or gap) end
+        it.x, it.y = x, y + (l.h - it.h) / 2
+        x = x + it.w
+      end
+      y = y + l.h + db.spacing
+    end
+    -- Each group's frame covers the bounding box of its icons.
+    for _, m in ipairs(flow) do
+      local x0, y0, x1, y1 = math.huge, math.huge, -math.huge, -math.huge
+      for _, it in ipairs(items) do
+        if it.m == m then
+          x0, y0 = math.min(x0, it.x), math.min(y0, it.y)
+          x1, y1 = math.max(x1, it.x + it.w), math.max(y1, it.y + it.h)
+        end
+      end
+      local pos = {}
+      for _, it in ipairs(items) do
+        if it.m == m and it.i then pos[it.i] = { it.x - x0, it.y - y0 } end
+      end
+      local f = m.frame
+      f:ClearAllPoints()
+      f:SetSize(x1 - x0, y1 - y0)
+      f:SetPoint("TOPLEFT", root, "TOPLEFT", x0, -y0)
+      m.flowPos = m.count > 0 and pos or nil
+      m:Place()
     end
   end
   root:SetSize(width, math.max(y - db.spacing, 1))
