@@ -213,6 +213,8 @@ local function BuildGeneral()
   Checkbox(c, x, y, "Energy tick timer", function() return db().energyTick end, function(v) db().energyTick = v end); y = y - 24
   Checkbox(c, x, y, "Powershift marks on mana", function() return db().manaTicks end, function(v) db().manaTicks = v end); y = y - 24
   Checkbox(c, x, y, "Merge icons onto one line", function() return db().mergeIcons end, function(v) db().mergeIcons = v end); y = y - 24
+  Checkbox(c, x, y, "Show minimap button", function() return not db().minimap.hide end,
+    function(v) db().minimap.hide = not v; ns:UpdateMinimap() end); y = y - 24
 
   y = y - 10
   Header(c, x, y, "Clearcasting")

@@ -5,6 +5,9 @@
 ## Version: @project-version@
 ## SavedVariables: CompactDruidBarDB
 ## IconTexture: 132115
+## AddonCompartmentFunc: CompactDruidBar_OnAddonCompartmentClick
+## AddonCompartmentFuncOnEnter: CompactDruidBar_OnAddonCompartmentEnter
+## AddonCompartmentFuncOnLeave: CompactDruidBar_OnAddonCompartmentLeave
 
 Core.lua
 Options.lua

@@ -28,6 +28,7 @@ Then restart the game (or `/reload`) and enable the addon in the AddOns menu on 
 |---|---|
 | `/cdb` | Open the options panel |
 | `/cdb spells` | Open the Spells page (custom + built-in spells) |
+| `/cdb minimap` | Toggle the minimap button (off by default; the addon is always in the minimap addon list) |
 | `/cdb unlock` / `/cdb lock` | Toggle move mode |
 | `/cdb scale 1.2` | Set the bar scale |
 | `/cdb reset` | Reset positions and scale |

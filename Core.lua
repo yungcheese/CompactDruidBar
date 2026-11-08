@@ -43,6 +43,7 @@ local DEFAULTS = {
   ccGlow = true, ccSound = true, ccFlash = true,
   ccSoundKey = "kit:ALARM_CLOCK_WARNING_3", ccSoundChannel = "Master",
   bleedWarn = true, consumables = true, cpGlow = true, gcdSpark = true,
+  minimap = { hide = true, minimapPos = 220 }, -- same keys LibDBIcon uses
   point = { "CENTER", "UIParent", "CENTER", 0, -160 },
   modules = {},
   custom = {},   -- { id, name, kind = "cd"|"buff"|"debuff", forms = { cat, bear, caster } }
@@ -1388,6 +1389,9 @@ ev:SetScript("OnEvent", function(_, event, arg1)
 
   if not ns.db then return end
 
+  -- All addons are loaded by now, so LibDBIcon from other addons is available.
+  if event == "PLAYER_ENTERING_WORLD" then ns:SetupMinimap() end
+
   if event == "PLAYER_ENTERING_WORLD" or event == "UPDATE_SHAPESHIFT_FORM" or event == "UPDATE_SHAPESHIFT_FORMS"
     or event == "SPELLS_CHANGED" or event == "CHARACTER_POINTS_CHANGED" or event == "UNIT_DISPLAYPOWER"
     or event == "UNIT_MAXPOWER" then
@@ -1413,6 +1417,121 @@ ev:SetScript("OnEvent", function(_, event, arg1)
 end)
 
 ------------------------------------------------------------------------
+-- Launchers: Addon Compartment (minimap addon list) + optional minimap button
+------------------------------------------------------------------------
+local ICON = 132115 -- Cat Form
+
+function ns:OnLauncherClick(button)
+  if not self.db then return end
+  if button == "RightButton" then
+    self:SetLocked(not self.db.locked)
+  elseif IsShiftKeyDown() then
+    self:OpenOptions("spells")
+  else
+    self:OpenOptions()
+  end
+end
+
+function ns:LauncherTooltip(tt)
+  tt:AddLine("Compact Druid Bar")
+  tt:AddLine("Left-click: options", 1, 1, 1)
+  tt:AddLine("Shift+left-click: spells", 1, 1, 1)
+  tt:AddLine("Right-click: " .. ((self.db and self.db.locked) and "unlock (move)" or "lock"), 1, 1, 1)
+end
+
+function CompactDruidBar_OnAddonCompartmentClick(_, button) ns:OnLauncherClick(button) end
+function CompactDruidBar_OnAddonCompartmentEnter(_, frame)
+  GameTooltip:SetOwner(frame, "ANCHOR_LEFT")
+  ns:LauncherTooltip(GameTooltip)
+  GameTooltip:Show()
+end
+function CompactDruidBar_OnAddonCompartmentLeave() GameTooltip:Hide() end
+
+-- Own minimap button (used when LibDBIcon isn't loaded by another addon).
+local function CreateOwnMinimapButton()
+  local b = CreateFrame("Button", "CompactDruidBarMinimapButton", Minimap)
+  b:SetSize(31, 31)
+  b:SetFrameStrata("MEDIUM")
+  b:SetFrameLevel(8)
+  b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+  b:RegisterForDrag("LeftButton")
+  b:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+  local bg = b:CreateTexture(nil, "BACKGROUND")
+  bg:SetSize(20, 20)
+  bg:SetTexture("Interface\\Minimap\\UI-Minimap-Background")
+  bg:SetPoint("TOPLEFT", 7, -5)
+  local icon = b:CreateTexture(nil, "ARTWORK")
+  icon:SetSize(17, 17)
+  icon:SetTexture(ICON)
+  icon:SetPoint("TOPLEFT", 7, -6)
+  local border = b:CreateTexture(nil, "OVERLAY")
+  border:SetSize(53, 53)
+  border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
+  border:SetPoint("TOPLEFT")
+
+  local function UpdatePos()
+    local a = math.rad(ns.db.minimap.minimapPos or 220)
+    local r = Minimap:GetWidth() / 2 + 5
+    b:ClearAllPoints()
+    b:SetPoint("CENTER", Minimap, "CENTER", math.cos(a) * r, math.sin(a) * r)
+  end
+  b.UpdatePos = UpdatePos
+
+  b:SetScript("OnClick", function(_, button) ns:OnLauncherClick(button) end)
+  b:SetScript("OnDragStart", function(self)
+    self:SetScript("OnUpdate", function()
+      local mx, my = Minimap:GetCenter()
+      local s = Minimap:GetEffectiveScale()
+      local cx, cy = GetCursorPosition()
+      cx, cy = cx / s, cy / s
+      local atan2 = math.atan2 or function(y, x) return math.atan(y, x) end
+      ns.db.minimap.minimapPos = math.deg(atan2(cy - my, cx - mx)) % 360
+      UpdatePos()
+    end)
+  end)
+  b:SetScript("OnDragStop", function(self) self:SetScript("OnUpdate", nil) end)
+  b:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    ns:LauncherTooltip(GameTooltip)
+    GameTooltip:Show()
+  end)
+  b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  UpdatePos()
+  return b
+end
+
+function ns:SetupMinimap()
+  if self.minimapReady then return end
+  self.minimapReady = true
+  local LDB = LibStub and LibStub("LibDataBroker-1.1", true)
+  local DBI = LibStub and LibStub("LibDBIcon-1.0", true)
+  if LDB and DBI then
+    local obj = LDB:NewDataObject("CompactDruidBar", {
+      type = "launcher",
+      icon = ICON,
+      OnClick = function(_, button) ns:OnLauncherClick(button) end,
+      OnTooltipShow = function(tt) ns:LauncherTooltip(tt) end,
+    })
+    DBI:Register("CompactDruidBar", obj, self.db.minimap)
+    self.dbi = DBI
+  else
+    self.minimapButton = CreateOwnMinimapButton()
+  end
+  self:UpdateMinimap()
+end
+
+function ns:UpdateMinimap()
+  if not self.minimapReady then return end
+  local show = not self.db.minimap.hide
+  if self.dbi then
+    if show then self.dbi:Show("CompactDruidBar") else self.dbi:Hide("CompactDruidBar") end
+  elseif self.minimapButton then
+    self.minimapButton:SetShown(show)
+    if show then self.minimapButton.UpdatePos() end
+  end
+end
+
+------------------------------------------------------------------------
 -- Slash commands
 ------------------------------------------------------------------------
 SLASH_COMPACTDRUIDBAR1 = "/cdb"
@@ -1435,10 +1554,14 @@ SlashCmdList.COMPACTDRUIDBAR = function(msg)
     ns:Debug()
   elseif cmd == "spells" then
     if ns.OpenOptions then ns:OpenOptions("spells") end
+  elseif cmd == "minimap" then
+    ns.db.minimap.hide = not ns.db.minimap.hide
+    ns:UpdateMinimap()
+    if ns.RefreshOptions then ns.RefreshOptions() end
   elseif cmd == "" or cmd == "config" or cmd == "options" then
     if ns.OpenOptions then ns:OpenOptions() end
   else
-    print("|cff4fe8ffCompact Druid Bar|r: /cdb (options), /cdb unlock, /cdb lock, /cdb scale 1.2, /cdb spells, /cdb reset, /cdb test, /cdbdebug")
+    print("|cff4fe8ffCompact Druid Bar|r: /cdb (options), /cdb unlock, /cdb lock, /cdb scale 1.2, /cdb spells, /cdb minimap, /cdb reset, /cdb test, /cdbdebug")
   end
 end
 
