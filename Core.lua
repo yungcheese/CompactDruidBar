@@ -414,21 +414,39 @@ do
   -- Detect energy ticks: a gain of ~20 energy = tick (Furor = 40, ignored).
   -- If energy is secret we use the rhythm instead: ticks always land on the
   -- same point of a 2 sec cycle, regular casts land at random points.
-  -- We keep a histogram of "time mod 2"; its peak is the tick moment.
+  -- We keep a histogram of "time mod 2" (40 bins of 0.05s); its peak is the tick moment.
+  -- Power changes right after our own casts are ignored (energy spent / Furor),
+  -- the spark only appears once the peak clearly stands out, and the phase is
+  -- a weighted average, so it moves smoothly instead of jumping.
+  local NB = 40
   m.bins = {}
-  for i = 1, 20 do m.bins[i] = 0 end
+  for i = 1, NB do m.bins[i] = 0 end
+  local function Bin(i) return m.bins[(i - 1) % NB + 1] end
   function m:OnPowerSecret()
     local now = GetTime()
-    local b = math.floor((now % 2) * 10) % 20 + 1
-    local peak, peakV = 1, -1
-    for i = 1, 20 do
-      self.bins[i] = self.bins[i] * 0.93
-      if self.bins[i] > peakV then peak, peakV = i, self.bins[i] end
-    end
+    if self.gcdStart and now - self.gcdStart < 0.25 then return end -- caused by our cast
+    local b = math.floor((now % 2) / 2 * NB) % NB + 1
+    for i = 1, NB do self.bins[i] = self.bins[i] * 0.96 end
     self.bins[b] = self.bins[b] + 1
-    local dist = math.abs(b - peak)
-    if dist > 10 then dist = 20 - dist end
-    if peakV >= 1.5 and dist <= 1 then self.lastTick = now end
+
+    -- Strongest 3-bin window, and the strongest window that isn't next to it.
+    local best, bestV = 1, -1
+    for i = 1, NB do
+      local v = Bin(i - 1) + Bin(i) + Bin(i + 1)
+      if v > bestV then best, bestV = i, v end
+    end
+    local second = 0
+    for i = 1, NB do
+      local d = math.abs(i - best)
+      d = math.min(d, NB - d)
+      if d > 3 then second = math.max(second, Bin(i - 1) + Bin(i) + Bin(i + 1)) end
+    end
+    if bestV < 3 or bestV < second * 1.8 then return end -- rhythm not clear yet
+
+    local wl, wc, wr = Bin(best - 1), Bin(best), Bin(best + 1)
+    local offset = (wr - wl) / (wl + wc + wr)
+    local phase = ((best - 1 + 0.5 + offset) * 2 / NB) % 2
+    self.lastTick = phase + 2 -- (GetTime() - lastTick) % 2 gives the position in the cycle
   end
   function m:OnPower()
     if UnitPowerType("player") ~= 3 then self.lastPower = nil return end
