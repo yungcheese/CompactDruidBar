@@ -1,6 +1,8 @@
 # Changelog
 
 ## v1.0.2
+- Combo points moved to the top of the bar
+- "Alarm" game sound is back, and the original Blizzard spell proc sound is offered when SpellActivationOverlay is installed
 - New look: "Classic gold frame" style (default) with Blizzard bar textures, gold accents, combo point gems, classic icon borders, a background panel and bar sparks; Classic polished, Flat and Soft styles available in the options
 - New logo
 - Clearcasting sounds are now shipped with the addon (10 original alert sounds), so they work on every client; also shared with other addons through SharedMedia

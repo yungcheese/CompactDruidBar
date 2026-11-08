@@ -23,7 +23,7 @@ ns.readable = readable
 ------------------------------------------------------------------------
 -- Defaults
 ------------------------------------------------------------------------
-ns.MODULE_ORDER = { "health", "power", "combo", "mana", "debuffs", "cooldowns", "buffs", "clearcast" }
+ns.MODULE_ORDER = { "combo", "health", "power", "mana", "debuffs", "cooldowns", "buffs", "clearcast" }
 ns.MODULE_LABELS = {
   health = "Health",
   power = "Energy / Rage / Mana",
@@ -1299,6 +1299,19 @@ local ADDON_SOUNDS = {
   { "gong", "Gong" },
   { "whoosh", "Whoosh" },
 }
+-- Game sounds that are audible on WoW Forever.
+local GAME_SOUNDS = {
+  { "ALARM_CLOCK_WARNING_3", "Alarm (game)" },
+}
+-- Sounds borrowed from other installed addons (we don't ship Blizzard files ourselves).
+local EXTERNAL_SOUNDS = {
+  { "sao", "Spell proc (Blizzard, via SpellActivationOverlay)", "SpellActivationOverlay",
+    "Interface\AddOns\SpellActivationOverlay\sounds\UI_PowerAura_Generic.ogg" },
+}
+local function AddonLoaded(name)
+  if C_AddOns and C_AddOns.IsAddOnLoaded then return C_AddOns.IsAddOnLoaded(name) end
+  return IsAddOnLoaded and IsAddOnLoaded(name)
+end
 local LSM_PREFIX = "CDB: "
 local DEFAULT_SOUND = "file:shimmer"
 ns.DEFAULT_SOUND = DEFAULT_SOUND
@@ -1318,7 +1331,13 @@ end
 -- Returns a list of { key, label }. Keys: "file:name", "lsm:Name", "custom".
 function ns.GetSoundChoices()
   local list = {}
+  for _, e in ipairs(EXTERNAL_SOUNDS) do
+    if AddonLoaded(e[3]) then list[#list + 1] = { "ext:" .. e[1], e[2] } end
+  end
   for _, s in ipairs(ADDON_SOUNDS) do list[#list + 1] = { "file:" .. s[1], s[2] } end
+  for _, g in ipairs(GAME_SOUNDS) do
+    if SOUNDKIT and SOUNDKIT[g[1]] then list[#list + 1] = { "kit:" .. g[1], g[2] } end
+  end
   local LSM = GetLSM()
   if LSM then
     for _, name in ipairs(LSM:List("sound")) do
@@ -1342,6 +1361,20 @@ function ns:PlayAlertSound(key, manual)
     local ok, willPlay = pcall(PlaySoundFile, SOUND_PATH .. val .. ".mp3", ch)
     played = ok and willPlay
     why = "sound file missing"
+  elseif kind == "kit" then
+    if SOUNDKIT and SOUNDKIT[val] then
+      local ok, willPlay = pcall(PlaySound, SOUNDKIT[val], ch)
+      played = ok and willPlay
+    end
+    why = "game sound not available on this client"
+  elseif kind == "ext" then
+    for _, e in ipairs(EXTERNAL_SOUNDS) do
+      if e[1] == val then
+        local ok, willPlay = pcall(PlaySoundFile, e[4], ch)
+        played = ok and willPlay
+        why = e[3] .. " is not installed or enabled"
+      end
+    end
   elseif kind == "lsm" then
     local LSM = GetLSM()
     local p = LSM and LSM:Fetch("sound", val, true)
@@ -1753,7 +1786,8 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
     end
     ns.db = CopyDefaults(DEFAULTS, CompactDruidBarDB)
     -- Upgrade: the old game-sound choices ("kit:...") are gone, use our own sound.
-    if type(ns.db.ccSoundKey) == "string" and ns.db.ccSoundKey:sub(1, 4) == "kit:" then
+    if type(ns.db.ccSoundKey) == "string" and ns.db.ccSoundKey:sub(1, 4) == "kit:"
+      and ns.db.ccSoundKey ~= "kit:ALARM_CLOCK_WARNING_3" then
       ns.db.ccSoundKey = ns.DEFAULT_SOUND
     end
     for _, key in ipairs(ns.MODULE_ORDER) do CreateMover(ns.modules[key]) end
@@ -2011,7 +2045,7 @@ function ns:Debug()
       local state = readable(v) and tostring(v) or "SECRET"
       print(("  %s: %s"):format(label, state))
     end
-    print("|cff4fe8ffCompact Druid Bar debug|r build 7 (secret-API: " .. tostring(issecretvalue ~= nil) .. ", in combat: " .. tostring(UnitAffectingCombat("player")) .. ")")
+    print("|cff4fe8ffCompact Druid Bar debug|r build 8 (secret-API: " .. tostring(issecretvalue ~= nil) .. ", in combat: " .. tostring(UnitAffectingCombat("player")) .. ")")
     show("Health", UnitHealth("player"))
     show("Health max", UnitHealthMax("player"))
     show("Power type", UnitPowerType("player"))
@@ -2055,5 +2089,9 @@ function ns:Debug()
         mm.shiftBroken and " (FAILED)" or ""))
     end)
     print("  UnitHealthPercent: " .. tostring(UnitHealthPercent ~= nil))
+    local pw, ph = ns.panel:GetSize()
+    print(("  Style: %s, panel option: %s, panel shown: %s, visible: %s, size: %dx%d, alpha: %.2f"):format(
+      tostring(ns.db.style), tostring(ns.db.panel), tostring(ns.panel:IsShown()), tostring(ns.panel:IsVisible()),
+      pw or 0, ph or 0, ns.panel:GetEffectiveAlpha() or 0))
     print(("  Energy tick known: %s"):format(tostring(ns.modules.power.lastTick > 0)))
 end
