@@ -90,19 +90,21 @@ local function Slider(parent, x, y, label, min, max, step, key, fmt)
   local t = s:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
   t:SetPoint("BOTTOMLEFT", s, "TOPLEFT", 0, 3)
   local function Label(v) t:SetText(label .. ": " .. string.format(fmt or "%d", v)) end
+  -- `key` is a db field name, or a { get = fn, set = fn } pair.
+  local function Get() if type(key) == "table" then return key.get() end return ns.db[key] end
   s:SetScript("OnValueChanged", function(self, v)
     v = math.floor(v / step + 0.5) * step
     Label(v)
     if self.updating then return end
-    ns.db[key] = v
+    if type(key) == "table" then key.set(v) else ns.db[key] = v end
     ns:Layout()
     ns:UpdateAll()
   end)
   s:SetScript("OnMouseWheel", function(self, delta) self:SetValue(self:GetValue() + delta * step) end)
   OnRefresh(function()
     s.updating = true
-    s:SetValue(ns.db[key])
-    Label(ns.db[key])
+    s:SetValue(Get())
+    Label(Get())
     s.updating = false
   end)
 end
@@ -221,7 +223,13 @@ end
 -- Page 1: General
 ------------------------------------------------------------------------
 local function BuildGeneral()
-  local panel, c = MakePage("Compact Druid Bar", 720)
+  local panel, c = MakePage("Compact Druid Bar", 860)
+  local function RowSize(row)
+    return {
+      get = function() return ns.db.iconSizes[row] end,
+      set = function(v) ns.db.iconSizes[row] = v end,
+    }
+  end
   local db = function() return ns.db end
 
   Text(c, 16, -16, "Compact Druid Bar", "GameFontNormalLarge")
@@ -237,7 +245,16 @@ local function BuildGeneral()
     { "Width", 80, 400, 5, "width" },
     { "Main bar height", 4, 40, 1, "barHeight" },
     { "Combo/mana bar height", 2, 30, 1, "smallBarHeight" },
-    { "Icon size", 10, 60, 1, "iconSize" },
+    { "Icon size (all rows)", 10, 60, 1, {
+      get = function() return ns.db.iconSize end,
+      set = function(v)
+        ns.db.iconSize = v
+        for k in pairs(ns.db.iconSizes) do ns.db.iconSizes[k] = v end
+        ns.RefreshOptions()
+      end } },
+    { "   Debuff icons", 10, 60, 1, RowSize("debuffs") },
+    { "   Cooldown icons", 10, 60, 1, RowSize("cooldowns") },
+    { "   Buff icons", 10, 60, 1, RowSize("buffs") },
     { "Font size", 6, 20, 1, "fontSize" },
     { "Spacing", 0, 12, 1, "spacing" },
     { "Out of combat opacity", 0, 1, 0.05, "oocAlpha", "%.2f" },

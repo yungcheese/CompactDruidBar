@@ -44,6 +44,7 @@ local DEFAULTS = {
   ccSoundKey = "kit:UI_POWER_AURA_GENERIC", ccSoundChannel = "Master",
   bleedWarn = true, consumables = true, cpGlow = true, gcdSpark = true,
   minimap = { hide = true, minimapPos = 220 }, -- same keys LibDBIcon uses
+  iconSizes = { debuffs = 22, cooldowns = 22, buffs = 22 }, -- per icon row
   point = { "CENTER", "UIParent", "CENTER", 0, -160 },
   modules = {},
   custom = {},   -- { id, name, kind = "cd"|"buff"|"debuff", forms = { cat, bear, caster } }
@@ -309,7 +310,9 @@ local function CreateIcon(parent)
 end
 
 local function StyleCooldownText(icon)
-  local size = math.max(8, math.floor(ns.db.iconSize * 0.42))
+  local w = icon:GetWidth()
+  if not w or w <= 0 then w = ns.db.iconSize end
+  local size = math.max(8, math.floor(w * 0.42))
   for _, r in ipairs({ icon.cd:GetRegions() }) do
     if r and r.GetObjectType and r:GetObjectType() == "FontString" then
       r:SetFont(FONT, size, "OUTLINE")
@@ -740,19 +743,23 @@ local function IconRow(key)
     if not self.icons[i] then self.icons[i] = CreateIcon(self.frame) end
     return self.icons[i]
   end
+  -- Icon size of this row (falls back to the global size).
+  function m:Size()
+    return (ns.db.iconSizes and ns.db.iconSizes[key]) or ns.db.iconSize
+  end
   function m:ContentWidth()
     if self.count == 0 then return 0 end
-    local s, g = ns.db.iconSize, ns.db.spacing
+    local s, g = self:Size(), ns.db.spacing
     return self.count * s + (self.count - 1) * g
   end
   function m:IsActive() return self.count > 0 end
   function m:Resize(w)
-    self.frame:SetSize(w, ns.db.iconSize)
+    self.frame:SetSize(w, self:Size())
     self:Place()
   end
   -- Icons centered inside the frame.
   function m:Place()
-    local s, g = ns.db.iconSize, ns.db.spacing
+    local s, g = self:Size(), ns.db.spacing
     local off = math.max(0, (self.frame:GetWidth() - self:ContentWidth()) / 2)
     for i, ic in ipairs(self.icons) do
       ic:SetSize(s, s)
@@ -1340,7 +1347,10 @@ local function CreateMover(m)
   end)
   mv:SetScript("OnMouseWheel", function(_, delta)
     local mdb = ns.db.modules[m.key]
-    if mdb.detached then
+    if m.isIconRow and IsControlKeyDown() then
+      -- Ctrl+wheel on an icon row: change only this row's icon size.
+      ns.db.iconSizes[m.key] = math.min(60, math.max(10, m:Size() + delta * 2))
+    elseif mdb.detached then
       mdb.scale = math.min(3, math.max(0.3, (mdb.scale or 1) + delta * 0.05))
     else
       ns.db.scale = math.min(3, math.max(0.3, ns.db.scale + delta * 0.05))
@@ -1360,6 +1370,7 @@ local function CreateMover(m)
       GameTooltip:AddLine("Shift+drag: detach this element", 1, 1, 1)
       GameTooltip:AddLine("Mouse wheel: scale the whole bar", 1, 1, 1)
     end
+    if m.isIconRow then GameTooltip:AddLine("Ctrl+mouse wheel: icon size of this row", 1, 1, 1) end
     GameTooltip:Show()
   end)
   mv:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1410,31 +1421,34 @@ function ns:Layout()
   -- Icon groups (debuffs, cooldowns, buffs) side by side, centered;
   -- only wrap to a new line when they no longer fit the width.
   if #flow > 0 then
-    local s, gap = db.iconSize, db.spacing + 6
-    local rows, row, rowW = {}, {}, 0
+    local gap = db.spacing + 6
+    local rows, row, rowW, rowH = {}, {}, 0, 0
     for _, m in ipairs(flow) do
+      local s = m:Size()
       local cw = m:ContentWidth()
       if cw == 0 then cw = s * 2 end -- empty (only while unlocked)
       local add = (#row > 0 and gap or 0) + cw
       if #row > 0 and rowW + add > width then
-        rows[#rows + 1] = { items = row, w = rowW }
-        row, rowW, add = {}, 0, cw
+        rows[#rows + 1] = { items = row, w = rowW, h = rowH }
+        row, rowW, rowH, add = {}, 0, 0, cw
       end
-      row[#row + 1] = { m = m, w = cw }
+      row[#row + 1] = { m = m, w = cw, h = s }
       rowW = rowW + add
+      rowH = math.max(rowH, s)
     end
-    rows[#rows + 1] = { items = row, w = rowW }
+    rows[#rows + 1] = { items = row, w = rowW, h = rowH }
     for _, r in ipairs(rows) do
       local x = (width - r.w) / 2
       for _, it in ipairs(r.items) do
         local f = it.m.frame
-        f:SetWidth(it.w)
+        f:SetSize(it.w, it.h)
         f:ClearAllPoints()
-        f:SetPoint("TOPLEFT", root, "TOPLEFT", x, -y)
+        -- Smaller rows are centered vertically on the line.
+        f:SetPoint("TOPLEFT", root, "TOPLEFT", x, -(y + (r.h - it.h) / 2))
         it.m:Place()
         x = x + it.w + gap
       end
-      y = y + s + db.spacing
+      y = y + r.h + db.spacing
     end
   end
   root:SetSize(width, math.max(y - db.spacing, 1))
@@ -1558,6 +1572,11 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
       return
     end
     CompactDruidBarDB = CompactDruidBarDB or {}
+    -- Upgrade: start the per-row icon sizes from the existing global size.
+    if CompactDruidBarDB.iconSize and not CompactDruidBarDB.iconSizes then
+      local s = CompactDruidBarDB.iconSize
+      CompactDruidBarDB.iconSizes = { debuffs = s, cooldowns = s, buffs = s }
+    end
     ns.db = CopyDefaults(DEFAULTS, CompactDruidBarDB)
     for _, key in ipairs(ns.MODULE_ORDER) do CreateMover(ns.modules[key]) end
     if ns.BuildOptions then ns:BuildOptions() end

@@ -1,6 +1,7 @@
 # Changelog
 
 ## v1.0.2
+- Separate icon size per row (debuffs, cooldowns, buffs); Ctrl+mouse wheel on a row while unlocked
 - Faerie Fire (Feral) and Pounce are now recognized by name, so they work even when the client uses different spell IDs
 
 ## v1.0.1
