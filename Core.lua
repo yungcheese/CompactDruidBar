@@ -355,7 +355,7 @@ do
     local c = cc and CC_COLOR or POWER_COLORS[pt] or { 0.7, 0.7, 0.7 }
     self.bar.bar:SetStatusBarColor(c[1], c[2], c[3])
     self.glow:SetShown(cc and true or false)
-    if pt == 0 and readable(cur, max) then
+    if pt == 0 then
       SafeText(self.bar.textC, "%s / %s", Short(cur), Short(max))
     else
       SafeText(self.bar.textC, "%s", cur)
