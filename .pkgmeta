@@ -4,6 +4,7 @@ ignore:
   - README.md
   - CURSEFORGE.md
   - media
+  - sounds/preview.html
 
 manual-changelog:
   filename: CHANGELOG.md

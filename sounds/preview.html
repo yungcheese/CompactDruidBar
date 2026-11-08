@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sound preview</title>
+<style>
+  :root { --bg: #0f1a14; --card: #18271e; --text: #e8efe9; --muted: #9db3a5; --accent: #f0a63a; }
+  body { margin: 0; padding: 24px 16px; background: var(--bg); color: var(--text); font: 15px/1.4 system-ui, sans-serif; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p { color: var(--muted); margin: 0 0 18px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; max-width: 760px; }
+  button { background: var(--card); color: var(--text); border: 1px solid #2c4535; border-radius: 8px; padding: 14px; text-align: left; font: inherit; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button b { display: block; }
+  button span { color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<h1>Compact Druid Bar sounds</h1>
+<p>Click to listen. These are the files the addon plays in game.</p>
+<div class="grid" id="grid"></div>
+<script>
+  const sounds = [
+    ["shimmer", "Clearcast shimmer", "default"], ["chime", "Chime", ""], ["doublechime", "Double chime", ""],
+    ["bell", "Bell", ""], ["ping", "Ping", ""], ["pluck", "Pluck", ""], ["pop", "Pop", ""],
+    ["alert", "Alert beep", ""], ["gong", "Gong", ""], ["whoosh", "Whoosh", ""],
+  ];
+  const grid = document.getElementById("grid");
+  for (const [file, label, note] of sounds) {
+    const b = document.createElement("button");
+    b.innerHTML = `<b>${label}</b><span>${file}.mp3${note ? " · " + note : ""}</span>`;
+    b.onclick = () => new Audio(file + ".mp3").play();
+    grid.appendChild(b);
+  }
+</script>
+</body>
+</html>
