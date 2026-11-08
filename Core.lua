@@ -174,11 +174,16 @@ function ns.SpellName(id)
   if GetSpellInfo then return (GetSpellInfo(id)) end
 end
 function ns.KeyName(key)
-  local ids = S[key]
-  local n = ids and ns.SpellName(ids[1]) or key
-  if key == "ffFeral" then n = (n or "Faerie Fire") .. " (Feral)" end
-  if key == "pounce" then n = (n or "Pounce") end
-  return n or key
+  if key == "ffFeral" then
+    -- Some clients name every rank just "Faerie Fire"; add "(Feral)" ourselves.
+    local n = ns.SpellName(770) or "Faerie Fire"
+    return n .. " (Feral)"
+  end
+  for _, id in ipairs(S[key] or {}) do
+    local n = ns.SpellName(id)
+    if n then return n end
+  end
+  return key
 end
 local function Hidden(key) return ns.db and ns.db.hidden[key] end
 
