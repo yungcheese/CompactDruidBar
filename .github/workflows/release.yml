@@ -1,0 +1,26 @@
+# Bij een tag als v1.0.1 bouwt dit een zip, zet hem bij de GitHub-release
+# en uploadt hem naar CurseForge (zodra CF_API_KEY en X-Curse-Project-ID ingesteld zijn).
+name: Package and release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      CF_API_KEY: ${{ secrets.CF_API_KEY }}
+      GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Package and upload
+        uses: BigWigsMods/packager@v2

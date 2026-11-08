@@ -1,0 +1,1050 @@
+-- Compact Druid Bar - core
+-- Gebouwd voor de WoW Forever client (1.60.1, interface 16001).
+-- Forever gebruikt de Midnight-addonbeperkingen: in combat kunnen sommige
+-- waarden "secret" zijn. Alles wat rekent of vergelijkt is daarom beschermd
+-- met readable()/pcall, zodat de addon terugvalt i.p.v. errors te geven.
+
+local ADDON, ns = ...
+_G.CompactDruidBar = ns
+
+local TEX = "Interface\\Buttons\\WHITE8X8"
+local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+ns.TEX = TEX
+
+local issecret = issecretvalue or function() return false end
+local function readable(...)
+  for i = 1, select("#", ...) do
+    if issecret((select(i, ...))) then return false end
+  end
+  return true
+end
+ns.readable = readable
+
+------------------------------------------------------------------------
+-- Defaults
+------------------------------------------------------------------------
+ns.MODULE_ORDER = { "health", "power", "combo", "mana", "debuffs", "cooldowns", "buffs", "clearcast" }
+ns.MODULE_LABELS = {
+  health = "Health",
+  power = "Energy / Rage / Mana",
+  combo = "Combo points",
+  mana = "Mana + powershifts",
+  debuffs = "Target debuffs",
+  cooldowns = "Cooldowns",
+  buffs = "Buffs",
+  clearcast = "Clearcasting-icoon",
+}
+
+local DEFAULTS = {
+  locked = true,
+  scale = 1, width = 170, barHeight = 14, smallBarHeight = 8, iconSize = 22,
+  fontSize = 10, spacing = 2, oocAlpha = 0.4,
+  showText = true, energyTick = true, manaTicks = true,
+  ccGlow = true, ccSound = true, ccFlash = true,
+  point = { "CENTER", "UIParent", "CENTER", 0, -160 },
+  modules = {},
+}
+for _, k in ipairs(ns.MODULE_ORDER) do
+  DEFAULTS.modules[k] = { enabled = true, detached = false, scale = 1 }
+end
+ns.DEFAULTS = DEFAULTS
+
+local function CopyDefaults(src, dst)
+  for k, v in pairs(src) do
+    if type(v) == "table" then
+      if type(dst[k]) ~= "table" then dst[k] = {} end
+      CopyDefaults(v, dst[k])
+    elseif dst[k] == nil then
+      dst[k] = v
+    end
+  end
+  return dst
+end
+ns.CopyDefaults = CopyDefaults
+
+------------------------------------------------------------------------
+-- Spelldata (Classic spell-ID's, alle ranks)
+------------------------------------------------------------------------
+local S = {
+  rip       = { 1079, 9492, 9493, 9752, 9894, 9896 },
+  rake      = { 1822, 1823, 1824, 9904 },
+  pounce    = { 9007, 9824, 9826 },          -- Pounce Bleed debuff
+  ffFeral   = { 16857, 17390, 17391, 17392 },
+  ff        = { 770, 778, 9749, 9907 },
+  demo      = { 99, 1735, 9490, 9747, 9898 },
+  moonfire  = { 8921, 8924, 8925, 8926, 8927, 8928, 8929, 9833, 9834, 9835 },
+  swarm     = { 5570, 24974, 24975, 24976, 24977 },
+  motw      = { 1126, 5232, 6756, 5234, 8907, 9884, 9885, 21849, 21850 },
+  thorns    = { 467, 782, 1075, 8914, 9756, 9910 },
+  omen      = { 16864 },
+  tigers    = { 5217, 6793, 9845, 9846 },
+  dash      = { 1850, 9821 },
+  grasp     = { 16689, 16810, 16811, 16812, 16813, 17329 },
+  barkskin  = { 22812 },
+  innervate = { 29166 },
+  rebirth   = { 20484, 20739, 20742, 20747, 20748 },
+  bash      = { 5211, 6798, 8983 },
+  charge    = { 16979 },
+  enrage    = { 5229 },
+  frenzied  = { 22842, 22895, 22896 },
+  swiftmend = { 18562 },
+  nswift    = { 17116 },
+  hurricane = { 16914, 17401, 17402 },
+  claw      = { 1082, 3029, 5201, 9849, 9850 },
+  maul      = { 6807, 6808, 6809, 8972, 9745, 9880, 9881 },
+  ht        = { 5185, 5186, 5187, 5188, 5189, 6778, 8903, 9758, 9888, 9889, 25297 },
+}
+local CLEARCASTING_ID = 16870
+local CAT_FORM, BEAR_FORM, DIRE_BEAR_FORM = 768, 5487, 9634
+
+local SPELL_TO_KEY = {}
+for key, ids in pairs(S) do
+  for _, id in ipairs(ids) do SPELL_TO_KEY[id] = SPELL_TO_KEY[id] or key end
+end
+
+-- Per form: welke slots worden getoond. Een slot is een lijst van keys
+-- (bijv. Faerie Fire normaal + feral in één vakje).
+local DEBUFF_SLOTS = {
+  cat    = { { "rip" }, { "rake" }, { "pounce" }, { "ffFeral", "ff" } },
+  bear   = { { "demo" }, { "ffFeral", "ff" } },
+  caster = { { "moonfire" }, { "swarm" }, { "ff", "ffFeral" } },
+}
+local COOLDOWNS = {
+  cat    = { "ffFeral", "dash", "grasp", "barkskin", "innervate" },
+  bear   = { "charge", "bash", "enrage", "frenzied", "ffFeral", "barkskin" },
+  caster = { "grasp", "barkskin", "innervate", "rebirth", "swiftmend", "nswift", "hurricane" },
+}
+-- reminder = rood/grijs als hij ontbreekt; anders alleen zichtbaar als actief
+local BUFFS = {
+  { key = "motw", reminder = true },
+  { key = "thorns", reminder = true },
+  { key = "omen", reminder = true, needsKnown = true },
+  { key = "tigers", needsKnown = true, forms = { cat = true } },
+  { key = "grasp", needsKnown = true },
+}
+
+local function IsKnown(id)
+  return (IsPlayerSpell and IsPlayerSpell(id)) or (IsSpellKnown and IsSpellKnown(id)) or false
+end
+local function KnownID(key)
+  local ids = S[key]
+  if not ids then return end
+  for i = #ids, 1, -1 do
+    if IsKnown(ids[i]) then return ids[i] end
+  end
+end
+local function SpellIcon(id)
+  if C_Spell and C_Spell.GetSpellTexture then return C_Spell.GetSpellTexture(id) end
+  if GetSpellTexture then return GetSpellTexture(id) end
+end
+local function PowerCost(id)
+  if not id then return end
+  local ok, costs = pcall(function()
+    if C_Spell and C_Spell.GetSpellPowerCost then return C_Spell.GetSpellPowerCost(id) end
+    if GetSpellPowerCost then return GetSpellPowerCost(id) end
+  end)
+  if not ok or type(costs) ~= "table" or not costs[1] then return end
+  return costs[1].cost
+end
+local function GetCooldown(id)
+  if C_Spell and C_Spell.GetSpellCooldown then
+    local info = C_Spell.GetSpellCooldown(id)
+    if info then return info.startTime, info.duration end
+  elseif GetSpellCooldown then
+    local s, d = GetSpellCooldown(id)
+    return s, d
+  end
+end
+
+local function FormGroup()
+  local id = GetShapeshiftFormID and GetShapeshiftFormID()
+  if id == 1 then return "cat" end
+  if id == 5 or id == 8 then return "bear" end
+  return "caster"
+end
+
+------------------------------------------------------------------------
+-- Widget helpers
+------------------------------------------------------------------------
+ns.fontStrings = {}
+local function NewFS(parent, justify)
+  local fs = parent:CreateFontString(nil, "OVERLAY")
+  fs:SetFont(FONT, 10, "OUTLINE")
+  fs:SetJustifyH(justify or "CENTER")
+  ns.fontStrings[#ns.fontStrings + 1] = fs
+  return fs
+end
+
+local function Short(v)
+  if readable(v) and type(v) == "number" and AbbreviateLargeNumbers and v >= 10000 then
+    return AbbreviateLargeNumbers(v)
+  end
+  return v
+end
+
+local function SafeText(fs, fmt, ...)
+  if not ns.db.showText then fs:SetText("") return end
+  if not pcall(fs.SetFormattedText, fs, fmt, ...) then fs:SetText("") end
+end
+
+local function Pct(cur, max)
+  if readable(cur, max) and type(max) == "number" and max > 0 then
+    return math.floor(cur / max * 100 + 0.5)
+  end
+end
+
+local function CreateBar(parent)
+  local holder = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+  holder:SetBackdrop({ bgFile = TEX, edgeFile = TEX, edgeSize = 1 })
+  holder:SetBackdropColor(0, 0, 0, 0.55)
+  holder:SetBackdropBorderColor(0, 0, 0, 1)
+  local bar = CreateFrame("StatusBar", nil, holder)
+  bar:SetPoint("TOPLEFT", 1, -1)
+  bar:SetPoint("BOTTOMRIGHT", -1, 1)
+  bar:SetStatusBarTexture(TEX)
+  bar:SetMinMaxValues(0, 1)
+  bar:SetValue(0)
+  holder.bar = bar
+  holder.textL = NewFS(bar, "LEFT");   holder.textL:SetPoint("LEFT", 3, 0)
+  holder.textC = NewFS(bar, "CENTER"); holder.textC:SetPoint("CENTER", 0, 0)
+  holder.textR = NewFS(bar, "RIGHT");  holder.textR:SetPoint("RIGHT", -3, 0)
+  return holder
+end
+
+local function SetBar(holder, cur, max)
+  pcall(holder.bar.SetMinMaxValues, holder.bar, 0, max)
+  pcall(holder.bar.SetValue, holder.bar, cur)
+end
+
+local function CreateIcon(parent)
+  local f = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+  f:SetBackdrop({ edgeFile = TEX, edgeSize = 1 })
+  f:SetBackdropBorderColor(0, 0, 0, 1)
+  f.tex = f:CreateTexture(nil, "ARTWORK")
+  f.tex:SetPoint("TOPLEFT", 1, -1)
+  f.tex:SetPoint("BOTTOMRIGHT", -1, 1)
+  f.tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+  f.cd = CreateFrame("Cooldown", nil, f, "CooldownFrameTemplate")
+  f.cd:SetAllPoints(f.tex)
+  f.cd:SetDrawEdge(false)
+  if f.cd.SetHideCountdownNumbers then f.cd:SetHideCountdownNumbers(false) end
+  return f
+end
+
+local function StyleCooldownText(icon)
+  local size = math.max(8, math.floor(ns.db.iconSize * 0.42))
+  for _, r in ipairs({ icon.cd:GetRegions() }) do
+    if r and r.GetObjectType and r:GetObjectType() == "FontString" then
+      r:SetFont(FONT, size, "OUTLINE")
+    end
+  end
+end
+
+local function SetIconState(icon, active, missingRed)
+  icon.tex:SetDesaturated(not active)
+  icon.tex:SetAlpha(active and 1 or (missingRed and 0.9 or 0.3))
+  if missingRed and not active then
+    icon:SetBackdropBorderColor(0.9, 0.1, 0.1, 1)
+    icon.tex:SetVertexColor(1, 0.45, 0.45)
+  else
+    icon:SetBackdropBorderColor(0, 0, 0, 1)
+    icon.tex:SetVertexColor(1, 1, 1)
+  end
+end
+
+local function SetAuraTimer(icon, unit, aura)
+  icon.cd:SetReverse(true)
+  if C_UnitAuras and C_UnitAuras.GetAuraDuration and icon.cd.SetCooldownFromDurationObject then
+    local ok, d = pcall(C_UnitAuras.GetAuraDuration, unit, aura.auraInstanceID)
+    if ok and d and pcall(icon.cd.SetCooldownFromDurationObject, icon.cd, d) then
+      StyleCooldownText(icon)
+      return
+    end
+  end
+  local ok = pcall(function()
+    if aura.duration and aura.duration > 0 then
+      icon.cd:SetCooldown(aura.expirationTime - aura.duration, aura.duration)
+    else
+      icon.cd:Clear()
+    end
+  end)
+  if not ok then icon.cd:Clear() end
+  StyleCooldownText(icon)
+end
+
+local function ScanAuras(unit, filter)
+  local list = {}
+  if not (C_UnitAuras and C_UnitAuras.GetAuraDataByIndex) then return list end
+  for i = 1, 40 do
+    local ok, a = pcall(C_UnitAuras.GetAuraDataByIndex, unit, i, filter)
+    if not ok or not a then break end
+    list[#list + 1] = a
+  end
+  return list
+end
+
+------------------------------------------------------------------------
+-- Modules
+------------------------------------------------------------------------
+ns.modules = {}
+local root = CreateFrame("Frame", "CompactDruidBarRoot", UIParent)
+root:SetMovable(true)
+root:SetClampedToScreen(true)
+root:SetSize(170, 40)
+ns.root = root
+
+local function NewModule(key)
+  local f = CreateFrame("Frame", "CompactDruidBar_" .. key, UIParent)
+  f:SetMovable(true)
+  f:SetClampedToScreen(true)
+  f:SetSize(100, 10)
+  local m = { key = key, frame = f }
+  function m:IsActive() return true end
+  function m:Update() end
+  ns.modules[key] = m
+  return m
+end
+
+-- Health ------------------------------------------------------------
+do
+  local m = NewModule("health")
+  m.bar = CreateBar(m.frame)
+  m.bar:SetAllPoints()
+  m.bar.bar:SetStatusBarColor(0.22, 0.72, 0.28)
+  function m:Resize(w) self.frame:SetSize(w, ns.db.barHeight) end
+  function m:Update()
+    local cur, max = UnitHealth("player"), UnitHealthMax("player")
+    SetBar(self.bar, cur, max)
+    local pct = Pct(cur, max)
+    if pct then
+      SafeText(self.bar.textL, "%s / %s", Short(cur), Short(max))
+      SafeText(self.bar.textR, "%d%%", pct)
+    else
+      SafeText(self.bar.textL, "%s", cur)
+      self.bar.textR:SetText("")
+    end
+  end
+end
+
+-- Power (energy / rage / mana) + energy tick + clearcast glow -------
+do
+  local POWER_COLORS = { [0] = { 0.18, 0.45, 1 }, [1] = { 0.85, 0.15, 0.15 }, [3] = { 1, 0.82, 0.1 } }
+  local CC_COLOR = { 0.45, 0.92, 1 }
+  local m = NewModule("power")
+  m.bar = CreateBar(m.frame)
+  m.bar:SetAllPoints()
+  m.glow = m.frame:CreateTexture(nil, "BACKGROUND")
+  m.glow:SetPoint("TOPLEFT", -3, 3)
+  m.glow:SetPoint("BOTTOMRIGHT", 3, -3)
+  m.glow:SetColorTexture(CC_COLOR[1], CC_COLOR[2], CC_COLOR[3], 0.7)
+  m.glow:Hide()
+  m.spark = m.bar.bar:CreateTexture(nil, "OVERLAY", nil, 7)
+  m.spark:SetColorTexture(1, 1, 1, 0.95)
+  m.spark:SetWidth(2)
+  m.spark:Hide()
+  m.lastTick, m.lastPower = 0, nil
+
+  function m:Resize(w) self.frame:SetSize(w, ns.db.barHeight) end
+  function m:Update()
+    local pt = UnitPowerType("player")
+    local cur, max = UnitPower("player", pt), UnitPowerMax("player", pt)
+    SetBar(self.bar, cur, max)
+    local cc = ns.clearcasting and ns.db.ccGlow
+    local c = cc and CC_COLOR or POWER_COLORS[pt] or { 0.7, 0.7, 0.7 }
+    self.bar.bar:SetStatusBarColor(c[1], c[2], c[3])
+    self.glow:SetShown(cc and true or false)
+    if pt == 0 and readable(cur, max) then
+      SafeText(self.bar.textC, "%s / %s", Short(cur), Short(max))
+    else
+      SafeText(self.bar.textC, "%s", cur)
+    end
+    self.bar.textL:SetText("")
+    self.bar.textR:SetText("")
+  end
+
+  -- Energy-ticks herkennen: een stijging van ~20 energy = tick (Furor = 40, telt niet).
+  function m:OnPower()
+    if UnitPowerType("player") ~= 3 then self.lastPower = nil return end
+    local e, max = UnitPower("player", 3), UnitPowerMax("player", 3)
+    if not readable(e, max) then return end
+    if self.lastPower and e > self.lastPower then
+      local d = e - self.lastPower
+      if (d >= 18 and d <= 22) or (e == max and d < 20) then
+        self.lastTick = GetTime()
+      end
+    end
+    self.lastPower = e
+  end
+
+  m.frame:SetScript("OnUpdate", function()
+    if ns.db and ns.db.energyTick and m.lastTick > 0 and UnitPowerType("player") == 3 then
+      local w = m.bar.bar:GetWidth()
+      local x = w * (((GetTime() - m.lastTick) % 2) / 2)
+      m.spark:ClearAllPoints()
+      m.spark:SetPoint("TOP", m.bar.bar, "TOPLEFT", x, 0)
+      m.spark:SetPoint("BOTTOM", m.bar.bar, "BOTTOMLEFT", x, 0)
+      m.spark:Show()
+    else
+      m.spark:Hide()
+    end
+  end)
+end
+
+-- Combo points ------------------------------------------------------
+do
+  local m = NewModule("combo")
+  m.segs = {}
+  for i = 1, 5 do
+    local s = CreateFrame("Frame", nil, m.frame, "BackdropTemplate")
+    s:SetBackdrop({ bgFile = TEX, edgeFile = TEX, edgeSize = 1 })
+    s:SetBackdropColor(0, 0, 0, 0.55)
+    s:SetBackdropBorderColor(0, 0, 0, 1)
+    s.fill = s:CreateTexture(nil, "ARTWORK")
+    s.fill:SetPoint("TOPLEFT", 1, -1)
+    s.fill:SetPoint("BOTTOMRIGHT", -1, 1)
+    s.fill:SetColorTexture(1, 0.75, 0.1)
+    m.segs[i] = s
+  end
+  function m:Resize(w)
+    local h, gap = ns.db.smallBarHeight, 2
+    self.frame:SetSize(w, h)
+    local segW = (w - gap * 4) / 5
+    for i, s in ipairs(self.segs) do
+      s:ClearAllPoints()
+      s:SetSize(segW, h)
+      s:SetPoint("LEFT", self.frame, "LEFT", (i - 1) * (segW + gap), 0)
+    end
+  end
+  function m:IsActive() return ns.form == "cat" end
+  local function GetCP()
+    local cp = UnitPower("player", (Enum and Enum.PowerType and Enum.PowerType.ComboPoints) or 4)
+    if readable(cp) and (not cp or cp == 0) and GetComboPoints then
+      cp = GetComboPoints("player", "target")
+    end
+    return cp or 0
+  end
+  function m:Update()
+    local cp = GetCP()
+    for i, s in ipairs(self.segs) do
+      local ok, on = pcall(function() return cp >= i end)
+      s.fill:SetShown(ok and on)
+      local ok5, full = pcall(function() return cp >= 5 end)
+      if ok5 and full then s.fill:SetColorTexture(1, 0.3, 0.15) else s.fill:SetColorTexture(1, 0.75, 0.1) end
+    end
+  end
+end
+
+-- Mana + powershifts -----------------------------------------------
+do
+  local m = NewModule("mana")
+  m.bar = CreateBar(m.frame)
+  m.bar:SetAllPoints()
+  m.bar.bar:SetStatusBarColor(0.18, 0.45, 1)
+  m.ticks = {}
+  function m:Resize(w) self.frame:SetSize(w, ns.db.smallBarHeight); self.tickKey = nil end
+  function m:IsActive()
+    if UnitPowerType("player") == 0 then return false end
+    local max = UnitPowerMax("player", 0)
+    return not readable(max) or (max or 0) > 0
+  end
+  local function ShiftCost()
+    local id = CAT_FORM
+    if ns.form == "bear" then id = IsKnown(DIRE_BEAR_FORM) and DIRE_BEAR_FORM or BEAR_FORM end
+    return PowerCost(id)
+  end
+  function m:PlaceTicks(cost, max)
+    local key = ns.db.manaTicks and (cost .. ":" .. max .. ":" .. math.floor(self.bar.bar:GetWidth())) or "off"
+    if key == self.tickKey then return end
+    self.tickKey = key
+    local n = 0
+    if ns.db.manaTicks and cost > 0 and max > 0 then n = math.min(math.floor(max / cost), 30) end
+    local w = self.bar.bar:GetWidth()
+    for i = 1, math.max(n, #self.ticks) do
+      local t = self.ticks[i]
+      if i <= n then
+        if not t then
+          t = self.bar.bar:CreateTexture(nil, "OVERLAY", nil, 6)
+          t:SetColorTexture(0, 0, 0, 0.85)
+          t:SetWidth(1)
+          self.ticks[i] = t
+        end
+        local x = w * (i * cost / max)
+        t:ClearAllPoints()
+        t:SetPoint("TOP", self.bar.bar, "TOPLEFT", x, 0)
+        t:SetPoint("BOTTOM", self.bar.bar, "BOTTOMLEFT", x, 0)
+        t:Show()
+      elseif t then
+        t:Hide()
+      end
+    end
+  end
+  function m:Update()
+    local cur, max = UnitPower("player", 0), UnitPowerMax("player", 0)
+    SetBar(self.bar, cur, max)
+    local cost = ShiftCost()
+    if readable(cur, max, cost) and type(cost) == "number" and cost > 0 and max > 0 then
+      local n = math.floor(cur / cost)
+      SafeText(self.bar.textL, "x%d", n)
+      if n == 0 then self.bar.textL:SetTextColor(1, 0.3, 0.3) else self.bar.textL:SetTextColor(1, 1, 1) end
+      self:PlaceTicks(cost, max)
+    else
+      self.bar.textL:SetText("")
+      self:PlaceTicks(0, 0)
+    end
+    local pct = Pct(cur, max)
+    if pct then SafeText(self.bar.textR, "%d%%", pct) else self.bar.textR:SetText("") end
+  end
+end
+
+-- Generieke icon-rij ------------------------------------------------
+local function IconRow(key)
+  local m = NewModule(key)
+  m.icons, m.count = {}, 0
+  function m:GetIcon(i)
+    if not self.icons[i] then self.icons[i] = CreateIcon(self.frame) end
+    return self.icons[i]
+  end
+  function m:Resize(w)
+    self.frame:SetSize(w, ns.db.iconSize)
+    self:Place()
+  end
+  function m:Place()
+    local s, g = ns.db.iconSize, ns.db.spacing
+    for i, ic in ipairs(self.icons) do
+      ic:SetSize(s, s)
+      ic:ClearAllPoints()
+      ic:SetPoint("LEFT", self.frame, "LEFT", (i - 1) * (s + g), 0)
+      ic:SetShown(i <= self.count)
+      StyleCooldownText(ic)
+    end
+  end
+  function m:SetCount(n)
+    for i = 1, n do self:GetIcon(i) end
+    self.count = n
+    self:Place()
+  end
+  return m
+end
+
+-- Target debuffs ----------------------------------------------------
+do
+  local m = IconRow("debuffs")
+  function m:Rebuild()
+    self.slots = {}
+    for _, slot in ipairs(DEBUFF_SLOTS[ns.form] or {}) do
+      local iconID
+      for _, k in ipairs(slot) do
+        local id = KnownID(k)
+        if id then iconID = iconID or id end
+      end
+      if iconID then self.slots[#self.slots + 1] = { keys = slot, icon = SpellIcon(iconID) } end
+    end
+  end
+  function m:Update()
+    if not self.slots then self:Rebuild() end
+    local auras = UnitExists("target") and ScanAuras("target", "HARMFUL|PLAYER") or {}
+    local found, secretMode = {}, false
+    for _, a in ipairs(auras) do
+      if not readable(a.spellId) then secretMode = true break end
+      local k = SPELL_TO_KEY[a.spellId]
+      if k then found[k] = a end
+    end
+
+    if secretMode then
+      -- Fallback: ID's zijn afgeschermd -> toon gewoon al jouw debuffs op het target.
+      local n = math.min(#auras, 8)
+      self:SetCount(n)
+      for i = 1, n do
+        local ic, a = self.icons[i], auras[i]
+        pcall(ic.tex.SetTexture, ic.tex, a.icon)
+        SetIconState(ic, true)
+        SetAuraTimer(ic, "target", a)
+      end
+      return
+    end
+
+    self:SetCount(#self.slots)
+    for i, slot in ipairs(self.slots) do
+      local ic = self.icons[i]
+      local aura
+      for _, k in ipairs(slot.keys) do aura = aura or found[k] end
+      if aura then
+        ic.tex:SetTexture(aura.icon or slot.icon)
+        SetIconState(ic, true)
+        SetAuraTimer(ic, "target", aura)
+      else
+        ic.tex:SetTexture(slot.icon)
+        SetIconState(ic, false)
+        ic.cd:Clear()
+      end
+    end
+  end
+end
+
+-- Cooldowns ---------------------------------------------------------
+do
+  local m = IconRow("cooldowns")
+  function m:Rebuild()
+    self.spells = {}
+    for _, k in ipairs(COOLDOWNS[ns.form] or {}) do
+      local id = KnownID(k)
+      if id then self.spells[#self.spells + 1] = id end
+    end
+  end
+  function m:Update()
+    if not self.spells then self:Rebuild() end
+    self:SetCount(#self.spells)
+    for i, id in ipairs(self.spells) do
+      local ic = self.icons[i]
+      ic.tex:SetTexture(SpellIcon(id))
+      ic.cd:SetReverse(false)
+      local start, dur = GetCooldown(id)
+      if readable(start, dur) then
+        if start and dur and dur > 1.5 then
+          ic.cd:SetCooldown(start, dur)
+          SetIconState(ic, false)
+          ic.tex:SetAlpha(0.8)
+        else
+          ic.cd:Clear()
+          SetIconState(ic, true)
+        end
+      else
+        pcall(ic.cd.SetCooldown, ic.cd, start, dur)
+        SetIconState(ic, true)
+      end
+      StyleCooldownText(ic)
+    end
+  end
+end
+
+-- Buffs -------------------------------------------------------------
+do
+  local m = IconRow("buffs")
+  function m:Rebuild()
+    self.slots = {}
+    for _, b in ipairs(BUFFS) do
+      local okForm = not b.forms or b.forms[ns.form]
+      local known = KnownID(b.key)
+      if okForm and (known or not b.needsKnown) then
+        self.slots[#self.slots + 1] = { key = b.key, reminder = b.reminder, icon = SpellIcon(known or S[b.key][#S[b.key]]) }
+      end
+    end
+  end
+  function m:Update()
+    if not self.slots then self:Rebuild() end
+    local auras = ScanAuras("player", "HELPFUL")
+    local found = {}
+    for _, a in ipairs(auras) do
+      if not readable(a.spellId) then return end -- afgeschermd: vorige staat laten staan
+      local k = SPELL_TO_KEY[a.spellId]
+      if k then found[k] = a end
+    end
+    self:SetCount(#self.slots)
+    for i, slot in ipairs(self.slots) do
+      local ic, a = self.icons[i], found[slot.key]
+      if a then
+        ic.tex:SetTexture(a.icon or slot.icon)
+        SetIconState(ic, true)
+        SetAuraTimer(ic, "player", a)
+      else
+        ic.tex:SetTexture(slot.icon)
+        SetIconState(ic, false, slot.reminder)
+        ic.cd:Clear()
+      end
+    end
+  end
+end
+
+-- Clearcasting-icoon -----------------------------------------------
+do
+  local m = NewModule("clearcast")
+  m.icon = CreateIcon(m.frame)
+  m.icon:SetPoint("TOP")
+  m.icon.tex:SetTexture(SpellIcon(CLEARCASTING_ID) or 136170)
+  m.icon:SetBackdropBorderColor(0.45, 0.92, 1, 1)
+  m.text = NewFS(m.frame, "CENTER")
+  m.text:SetPoint("TOP", m.icon, "BOTTOM", 0, -1)
+  m.text:SetText("CLEARCAST")
+  m.text:SetTextColor(0.45, 0.92, 1)
+  local ag = m.icon:CreateAnimationGroup()
+  ag:SetLooping("BOUNCE")
+  local a = ag:CreateAnimation("Alpha")
+  a:SetFromAlpha(1)
+  a:SetToAlpha(0.45)
+  a:SetDuration(0.35)
+  m.pulse = ag
+  function m:Resize()
+    local s = math.floor(ns.db.iconSize * 1.5)
+    self.icon:SetSize(s, s)
+    self.frame:SetSize(math.max(s, 60), s + ns.db.fontSize + 4)
+  end
+  function m:IsActive() return ns.clearcasting end
+  function m:Update()
+    if ns.clearcasting then
+      if not self.pulse:IsPlaying() then self.pulse:Play() end
+    else
+      self.pulse:Stop()
+    end
+  end
+end
+
+------------------------------------------------------------------------
+-- Clearcasting detectie + flits/geluid
+------------------------------------------------------------------------
+local flash = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+flash:SetBackdrop({ edgeFile = TEX, edgeSize = 2 })
+flash:SetBackdropBorderColor(0.45, 0.92, 1, 1)
+flash:SetFrameStrata("HIGH")
+flash:SetAlpha(0)
+do
+  local ag = flash:CreateAnimationGroup()
+  for i = 1, 3 do
+    local on = ag:CreateAnimation("Alpha")
+    on:SetFromAlpha(0); on:SetToAlpha(1); on:SetDuration(0.1); on:SetOrder(i * 2 - 1)
+    local off = ag:CreateAnimation("Alpha")
+    off:SetFromAlpha(1); off:SetToAlpha(0); off:SetDuration(0.2); off:SetOrder(i * 2)
+  end
+  flash.anim = ag
+end
+ns.flash = flash
+
+local function HasClearcasting()
+  if C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID then
+    local ok, a = pcall(C_UnitAuras.GetPlayerAuraBySpellID, CLEARCASTING_ID)
+    if ok and a then return true end
+  end
+  -- Fallback als aura's in combat afgeschermd zijn: tijdens clearcasting kost
+  -- je volgende spell 0.
+  local key = (ns.form == "cat" and "claw") or (ns.form == "bear" and "maul") or "ht"
+  local id = KnownID(key)
+  if id then
+    local cost = PowerCost(id)
+    if readable(cost) and cost == 0 then return true end
+  end
+  return false
+end
+
+function ns:OnClearcastStart()
+  if self.db.ccSound then
+    local kit = SOUNDKIT and (SOUNDKIT.ALARM_CLOCK_WARNING_3 or SOUNDKIT.RAID_WARNING)
+    if not (kit and pcall(PlaySound, kit, "Master")) then pcall(PlaySound, 8959, "Master") end
+  end
+  if self.db.ccFlash then
+    flash.anim:Stop()
+    flash.anim:Play()
+  end
+end
+
+function ns:SetClearcasting(state)
+  if state == self.clearcasting then return end
+  self.clearcasting = state
+  if state then self:OnClearcastStart() end
+  self:Layout()
+  self.modules.power:Update()
+  self.modules.clearcast:Update()
+end
+
+function ns:TestClearcast()
+  self:SetClearcasting(true)
+  C_Timer.After(3, function() ns.testing = false; ns:SetClearcasting(HasClearcasting()) end)
+  self.testing = true
+end
+
+------------------------------------------------------------------------
+-- Layout, verplaatsen, schalen, loskoppelen
+------------------------------------------------------------------------
+local function SavePoint(frame)
+  local p, _, rp, x, y = frame:GetPoint()
+  return { p, "UIParent", rp, x, y }
+end
+
+local function ApplyPoint(frame, p)
+  frame:ClearAllPoints()
+  frame:SetPoint(p[1], UIParent, p[3], p[4], p[5])
+end
+
+function ns:Detach(m)
+  local mdb = self.db.modules[m.key]
+  local x, y = m.frame:GetCenter()
+  if not x then x, y = UIParent:GetCenter() end
+  mdb.detached = true
+  mdb.scale = 1
+  mdb.point = { "CENTER", "UIParent", "BOTTOMLEFT", x, y }
+  self:Layout()
+end
+
+function ns:Attach(m)
+  self.db.modules[m.key].detached = false
+  self:Layout()
+end
+
+local function CreateMover(m)
+  local mv = CreateFrame("Frame", nil, m.frame)
+  mv:SetAllPoints()
+  mv:SetFrameLevel(m.frame:GetFrameLevel() + 30)
+  mv:EnableMouse(true)
+  mv:EnableMouseWheel(true)
+  mv:RegisterForDrag("LeftButton")
+  mv.bg = mv:CreateTexture(nil, "OVERLAY")
+  mv.bg:SetAllPoints()
+  mv.label = NewFS(mv, "CENTER")
+  mv.label:SetPoint("CENTER")
+  mv:SetScript("OnDragStart", function()
+    local mdb = ns.db.modules[m.key]
+    if not mdb.detached and IsShiftKeyDown() then ns:Detach(m) end
+    ns.moving = mdb.detached and m.frame or root
+    ns.moving:StartMoving()
+  end)
+  mv:SetScript("OnDragStop", function()
+    local f = ns.moving
+    if not f then return end
+    f:StopMovingOrSizing()
+    pcall(f.SetUserPlaced, f, false)
+    if f == root then ns.db.point = SavePoint(root) else ns.db.modules[m.key].point = SavePoint(f) end
+    ns.moving = nil
+    ns:Layout()
+  end)
+  mv:SetScript("OnMouseUp", function(_, btn)
+    if btn == "RightButton" and ns.db.modules[m.key].detached then ns:Attach(m) end
+  end)
+  mv:SetScript("OnMouseWheel", function(_, delta)
+    local mdb = ns.db.modules[m.key]
+    if mdb.detached then
+      mdb.scale = math.min(3, math.max(0.3, (mdb.scale or 1) + delta * 0.05))
+    else
+      ns.db.scale = math.min(3, math.max(0.3, ns.db.scale + delta * 0.05))
+    end
+    ns:Layout()
+    if ns.RefreshOptions then ns.RefreshOptions() end
+  end)
+  mv:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:AddLine(ns.MODULE_LABELS[m.key])
+    if ns.db.modules[m.key].detached then
+      GameTooltip:AddLine("Slepen: verplaats dit onderdeel", 1, 1, 1)
+      GameTooltip:AddLine("Scrollwiel: schaal dit onderdeel", 1, 1, 1)
+      GameTooltip:AddLine("Rechtsklik: weer vastkoppelen aan het blok", 1, 1, 1)
+    else
+      GameTooltip:AddLine("Slepen: verplaats het hele blok", 1, 1, 1)
+      GameTooltip:AddLine("Shift+slepen: maak dit onderdeel los", 1, 1, 1)
+      GameTooltip:AddLine("Scrollwiel: schaal het hele blok", 1, 1, 1)
+    end
+    GameTooltip:Show()
+  end)
+  mv:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  m.mover = mv
+end
+
+function ns:Layout()
+  local db = self.db
+  if not db then return end
+  for _, fs in ipairs(self.fontStrings) do fs:SetFont(FONT, db.fontSize, "OUTLINE") end
+
+  root:SetScale(db.scale)
+  ApplyPoint(root, db.point)
+
+  local y, width = 0, db.width
+  for _, key in ipairs(self.MODULE_ORDER) do
+    local m, mdb = self.modules[key], db.modules[key]
+    local f = m.frame
+    m:Resize(width)
+    local shown = mdb.enabled and (not db.locked or m:IsActive())
+    f:ClearAllPoints()
+    if mdb.detached then
+      f:SetScale(db.scale * (mdb.scale or 1))
+      if mdb.point then ApplyPoint(f, mdb.point) else f:SetPoint("CENTER", UIParent, "CENTER") end
+    else
+      f:SetScale(db.scale)
+      if key == "clearcast" then
+        f:SetPoint("TOPRIGHT", root, "TOPLEFT", -4, 0)
+      elseif shown then
+        f:SetPoint("TOP", root, "TOP", 0, -y)
+        y = y + f:GetHeight() + db.spacing
+      else
+        f:SetPoint("TOP", root, "TOP", 0, 0)
+      end
+    end
+    f:SetShown(shown)
+
+    local mv = m.mover
+    mv:SetShown(not db.locked and mdb.enabled)
+    if mdb.detached then mv.bg:SetColorTexture(1, 0.55, 0.1, 0.4) else mv.bg:SetColorTexture(0.1, 0.6, 1, 0.35) end
+    mv.label:SetText(self.MODULE_LABELS[key] .. (mdb.detached and " (los)" or ""))
+  end
+  root:SetSize(width, math.max(y - db.spacing, 1))
+
+  flash:SetScale(db.scale)
+  flash:ClearAllPoints()
+  flash:SetPoint("TOPLEFT", root, "TOPLEFT", -4, 4)
+  flash:SetPoint("BOTTOMRIGHT", root, "BOTTOMRIGHT", 4, -4)
+end
+
+function ns:RebuildRows()
+  for _, k in ipairs({ "debuffs", "cooldowns", "buffs" }) do self.modules[k]:Rebuild() end
+end
+
+function ns:UpdateAll()
+  for _, key in ipairs(self.MODULE_ORDER) do self.modules[key]:Update() end
+end
+
+function ns:Refresh()
+  self.form = FormGroup()
+  self:RebuildRows()
+  self:Layout()
+  self:UpdateAll()
+end
+
+function ns:SetLocked(locked)
+  self.db.locked = locked
+  self:Layout()
+  if self.RefreshOptions then self.RefreshOptions() end
+  print("|cff4fe8ffCompact Druid Bar|r: " .. (locked and "vergrendeld." or "ontgrendeld. Sleep, Shift+sleep om los te maken, scroll om te schalen."))
+end
+
+function ns:ResetPositions()
+  self.db.point = CopyDefaults(DEFAULTS.point, {})
+  self.db.scale = 1
+  for _, k in ipairs(self.MODULE_ORDER) do
+    local mdb = self.db.modules[k]
+    mdb.detached, mdb.point, mdb.scale = false, nil, 1
+  end
+  self:Layout()
+end
+
+function ns:ResetAll()
+  wipe(CompactDruidBarDB)
+  self.db = CopyDefaults(DEFAULTS, CompactDruidBarDB)
+  self:Refresh()
+end
+
+------------------------------------------------------------------------
+-- Zichtbaarheid (gedimd buiten combat)
+------------------------------------------------------------------------
+local function ComputeAlpha()
+  local db = ns.db
+  if not db.locked then return 1 end
+  if UnitAffectingCombat("player") then return 1 end
+  if UnitExists("target") and UnitCanAttack("player", "target") and not UnitIsDead("target") then return 1 end
+  local ok, full = pcall(function()
+    if UnitHealth("player") < UnitHealthMax("player") then return false end
+    local pt = UnitPowerType("player")
+    if pt == 1 then return UnitPower("player", 1) == 0 end
+    if UnitPower("player", pt) < UnitPowerMax("player", pt) then return false end
+    local mmax = UnitPowerMax("player", 0)
+    return mmax == 0 or UnitPower("player", 0) >= mmax
+  end)
+  if ok and full then return db.oocAlpha end
+  return 1
+end
+
+------------------------------------------------------------------------
+-- Events
+------------------------------------------------------------------------
+local ev = CreateFrame("Frame")
+local function TryRegister(event, ...)
+  if select("#", ...) > 0 then
+    pcall(ev.RegisterUnitEvent, ev, event, ...)
+  else
+    pcall(ev.RegisterEvent, ev, event)
+  end
+end
+
+ev:RegisterEvent("ADDON_LOADED")
+ev:SetScript("OnEvent", function(_, event, arg1)
+  if event == "ADDON_LOADED" then
+    if arg1 ~= ADDON then return end
+    local _, class = UnitClass("player")
+    if class ~= "DRUID" then
+      print("|cff4fe8ffCompact Druid Bar|r: geen druid, addon blijft uit.")
+      return
+    end
+    CompactDruidBarDB = CompactDruidBarDB or {}
+    ns.db = CopyDefaults(DEFAULTS, CompactDruidBarDB)
+    for _, key in ipairs(ns.MODULE_ORDER) do CreateMover(ns.modules[key]) end
+    if ns.BuildOptions then ns:BuildOptions() end
+
+    TryRegister("PLAYER_ENTERING_WORLD")
+    TryRegister("UPDATE_SHAPESHIFT_FORM")
+    TryRegister("UPDATE_SHAPESHIFT_FORMS")
+    TryRegister("SPELLS_CHANGED")
+    TryRegister("CHARACTER_POINTS_CHANGED")
+    TryRegister("PLAYER_TARGET_CHANGED")
+    TryRegister("SPELL_UPDATE_COOLDOWN")
+    TryRegister("PLAYER_REGEN_ENABLED")
+    TryRegister("PLAYER_REGEN_DISABLED")
+    TryRegister("UNIT_AURA", "player", "target")
+    TryRegister("UNIT_POWER_FREQUENT", "player")
+    TryRegister("UNIT_DISPLAYPOWER", "player")
+    TryRegister("UNIT_MAXPOWER", "player")
+
+    ev:SetScript("OnUpdate", function(_, elapsed)
+      ns.t1 = (ns.t1 or 0) + elapsed
+      ns.t2 = (ns.t2 or 0) + elapsed
+      if ns.t1 >= 0.05 then
+        ns.t1 = 0
+        for _, k in ipairs({ "health", "power", "combo", "mana" }) do
+          if ns.modules[k].frame:IsShown() then ns.modules[k]:Update() end
+        end
+        local a = ComputeAlpha()
+        for _, key in ipairs(ns.MODULE_ORDER) do ns.modules[key].frame:SetAlpha(a) end
+      end
+      if ns.t2 >= 0.1 then
+        ns.t2 = 0
+        if not ns.testing then ns:SetClearcasting(HasClearcasting()) end
+      end
+    end)
+    ns:Refresh()
+    return
+  end
+
+  if not ns.db then return end
+
+  if event == "PLAYER_ENTERING_WORLD" or event == "UPDATE_SHAPESHIFT_FORM" or event == "UPDATE_SHAPESHIFT_FORMS"
+    or event == "SPELLS_CHANGED" or event == "CHARACTER_POINTS_CHANGED" or event == "UNIT_DISPLAYPOWER"
+    or event == "UNIT_MAXPOWER" then
+    ns:Refresh()
+  elseif event == "UNIT_AURA" then
+    if arg1 == "player" then
+      ns.modules.buffs:Update()
+      if not ns.testing then ns:SetClearcasting(HasClearcasting()) end
+    elseif arg1 == "target" then
+      ns.modules.debuffs:Update()
+    end
+  elseif event == "PLAYER_TARGET_CHANGED" then
+    ns.modules.debuffs:Update()
+    ns.modules.combo:Update()
+  elseif event == "SPELL_UPDATE_COOLDOWN" then
+    ns.modules.cooldowns:Update()
+  elseif event == "UNIT_POWER_FREQUENT" then
+    ns.modules.power:OnPower()
+  elseif event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" then
+    ns.modules.buffs:Update()
+    ns.modules.debuffs:Update()
+  end
+end)
+
+------------------------------------------------------------------------
+-- Slash commands
+------------------------------------------------------------------------
+SLASH_COMPACTDRUIDBAR1 = "/cdb"
+SLASH_COMPACTDRUIDBAR2 = "/druidbar"
+SlashCmdList.COMPACTDRUIDBAR = function(msg)
+  if not ns.db then return end
+  msg = strtrim((msg or ""):lower())
+  local cmd, arg = msg:match("^(%S*)%s*(.-)$")
+  if cmd == "unlock" or cmd == "lock" or cmd == "move" then
+    ns:SetLocked(cmd == "lock" or (cmd == "move" and not ns.db.locked))
+  elseif cmd == "scale" and tonumber(arg) then
+    ns.db.scale = math.min(3, math.max(0.3, tonumber(arg)))
+    ns:Layout()
+  elseif cmd == "reset" then
+    ns:ResetPositions()
+    print("|cff4fe8ffCompact Druid Bar|r: posities en schaal gereset.")
+  elseif cmd == "test" then
+    ns:TestClearcast()
+  elseif cmd == "" or cmd == "config" or cmd == "options" then
+    if ns.OpenOptions then ns:OpenOptions() end
+  else
+    print("|cff4fe8ffCompact Druid Bar|r: /cdb (opties), /cdb unlock, /cdb lock, /cdb scale 1.2, /cdb reset, /cdb test")
+  end
+end

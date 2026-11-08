@@ -1,0 +1,10 @@
+## Interface: 16001
+## Title: Compact Druid Bar
+## Notes: Compacte, schaalbare druid-bar: health, energy/rage, combo points, mana + powershifts, energy tick, clearcasting, debuffs, cooldowns en buffs.
+## Author: Mula Moos
+## Version: @project-version@
+## SavedVariables: CompactDruidBarDB
+## IconTexture: 132115
+
+Core.lua
+Options.lua
