@@ -107,40 +107,114 @@ local function Slider(parent, x, y, label, min, max, step, key, fmt)
   end)
 end
 
--- "< value >" selector that cycles through a list.
-local function Cycler(parent, x, y, w, getList, get, set)
-  local prev = Button(parent, x, y, 24, "<", nil)
-  local box = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-  box:SetPoint("TOPLEFT", x + 26, y)
-  box:SetSize(w, 22)
-  box:SetBackdrop({ bgFile = ns.TEX, edgeFile = ns.TEX, edgeSize = 1 })
-  box:SetBackdropColor(0, 0, 0, 0.5)
-  box:SetBackdropBorderColor(0.4, 0.4, 0.4, 1)
-  local label = box:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-  label:SetPoint("CENTER")
-  label:SetWidth(w - 6)
-  local nextB = Button(parent, x + 28 + w, y, 24, ">", nil)
-  local function Index(list)
+-- Dropdown: a button that opens a scrollable list. With `preview`, every row
+-- gets a "Play" button so sounds can be heard before choosing.
+local function Dropdown(parent, x, y, w, getList, get, set, preview)
+  local TEX = ns.TEX
+  local ROWS, ROW_H = 12, 18
+
+  local btn = CreateFrame("Button", nil, parent, "BackdropTemplate")
+  btn:SetPoint("TOPLEFT", x, y)
+  btn:SetSize(w, 22)
+  btn:SetBackdrop({ bgFile = TEX, edgeFile = TEX, edgeSize = 1 })
+  btn:SetBackdropColor(0, 0, 0, 0.6)
+  btn:SetBackdropBorderColor(0.45, 0.45, 0.45, 1)
+  btn.text = btn:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+  btn.text:SetPoint("LEFT", 6, 0)
+  btn.text:SetPoint("RIGHT", -18, 0)
+  btn.text:SetJustifyH("LEFT")
+  local arrow = btn:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+  arrow:SetPoint("RIGHT", -6, 0)
+  arrow:SetText("v")
+
+  local list = CreateFrame("Frame", nil, btn, "BackdropTemplate")
+  list:SetFrameStrata("FULLSCREEN_DIALOG")
+  list:SetPoint("TOPLEFT", btn, "BOTTOMLEFT", 0, -2)
+  list:SetWidth(w)
+  list:SetBackdrop({ bgFile = TEX, edgeFile = TEX, edgeSize = 1 })
+  list:SetBackdropColor(0.05, 0.05, 0.05, 0.97)
+  list:SetBackdropBorderColor(0.45, 0.45, 0.45, 1)
+  list:EnableMouse(true)
+  list:EnableMouseWheel(true)
+  list:Hide()
+  local rows, offset = {}, 0
+
+  local function Label()
     local cur = get()
-    for i, item in ipairs(list) do if item[1] == cur then return i end end
-    return 1
+    for _, item in ipairs(getList()) do
+      if item[1] == cur then btn.text:SetText(item[2]) return end
+    end
+    btn.text:SetText("-")
   end
-  local function Show()
-    local list = getList()
-    local item = list[Index(list)]
-    label:SetText(item and item[2] or "-")
+
+  local function Row(i)
+    if rows[i] then return rows[i] end
+    local r = CreateFrame("Button", nil, list)
+    r:SetPoint("TOPLEFT", 2, -2 - (i - 1) * ROW_H)
+    r:SetSize(w - 4, ROW_H)
+    r:SetHighlightTexture(TEX)
+    r:GetHighlightTexture():SetVertexColor(1, 1, 1, 0.12)
+    r.text = r:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    r.text:SetPoint("LEFT", 4, 0)
+    r.text:SetPoint("RIGHT", preview and -38 or -4, 0)
+    r.text:SetJustifyH("LEFT")
+    r:SetScript("OnClick", function(self)
+      set(self.item[1])
+      list:Hide()
+      Label()
+    end)
+    if preview then
+      local p = CreateFrame("Button", nil, r)
+      p:SetSize(34, ROW_H)
+      p:SetPoint("RIGHT")
+      p:SetHighlightTexture(TEX)
+      p:GetHighlightTexture():SetVertexColor(1, 0.8, 0.1, 0.25)
+      local pt = p:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+      pt:SetPoint("CENTER")
+      pt:SetText("Play")
+      p:SetScript("OnClick", function() preview(r.item[1]) end)
+    end
+    rows[i] = r
+    return r
   end
-  local function Step(d)
-    local list = getList()
-    if #list == 0 then return end
-    local i = (Index(list) - 1 + d) % #list + 1
-    set(list[i][1])
-    Show()
+
+  local function Fill()
+    local items, cur = getList(), get()
+    local n = math.min(ROWS, #items)
+    list:SetHeight(n * ROW_H + 4)
+    for i = 1, math.max(ROWS, #rows) do
+      local item = items[i + offset]
+      if i <= n and item then
+        local r = Row(i)
+        r.item = item
+        r.text:SetText(item[2])
+        if item[1] == cur then r.text:SetTextColor(1, 0.82, 0) else r.text:SetTextColor(1, 1, 1) end
+        r:Show()
+      elseif rows[i] then
+        rows[i]:Hide()
+      end
+    end
   end
-  prev:SetScript("OnClick", function() Step(-1) end)
-  nextB:SetScript("OnClick", function() Step(1) end)
-  OnRefresh(Show)
-  return x + 28 + w + 26 -- x after the control
+
+  list:SetScript("OnMouseWheel", function(_, delta)
+    local items = getList()
+    offset = math.max(0, math.min(#items - ROWS, offset - delta))
+    Fill()
+  end)
+  btn:SetScript("OnClick", function()
+    if list:IsShown() then list:Hide() return end
+    -- Open with the selected item in view.
+    local items, cur = getList(), get()
+    offset = 0
+    for i, item in ipairs(items) do
+      if item[1] == cur then offset = math.max(0, math.min(#items - ROWS, i - 3)) break end
+    end
+    Fill()
+    list:Show()
+  end)
+  btn:SetScript("OnHide", function() list:Hide() end)
+  OnRefresh(Label)
+  return x + w
 end
 
 ------------------------------------------------------------------------
@@ -224,10 +298,11 @@ local function BuildGeneral()
   Checkbox(c, x, y, "Sound", function() return db().ccSound end, function(v) db().ccSound = v end); y = y - 28
 
   -- Sound picker
-  local afterX = Cycler(c, x, y, 150, ns.GetSoundChoices,
+  local afterX = Dropdown(c, x, y, 200, ns.GetSoundChoices,
     function() return db().ccSoundKey end,
-    function(v) db().ccSoundKey = v; ns.RefreshOptions() end)
-  Button(c, afterX + 4, y, 50, "Play", function() ns:PlayAlertSound() end)
+    function(v) db().ccSoundKey = v; ns.RefreshOptions() end,
+    function(key) ns:PlayAlertSound(key) end)
+  Button(c, afterX + 6, y, 50, "Play", function() ns:PlayAlertSound() end)
   y = y - 28
 
   local customLabel = Text(c, x, y - 4, "Sound ID:")
@@ -245,7 +320,7 @@ local function BuildGeneral()
   y = y - 28
 
   Text(c, x, y - 4, "Channel:")
-  Cycler(c, x + 60, y, 90,
+  Dropdown(c, x + 60, y, 120,
     function() return { { "Master", "Master" }, { "SFX", "Effects" }, { "Ambience", "Ambience" }, { "Dialog", "Dialog" } } end,
     function() return db().ccSoundChannel end,
     function(v) db().ccSoundChannel = v end)
@@ -272,7 +347,7 @@ local function BuildSpells()
   Header(c, x, y, "Add a spell")
   y = y - 22
   local input = EditBox(c, x, y, 180)
-  Cycler(c, x + 196, y, 110, function() return KINDS end,
+  Dropdown(c, x + 196, y, 140, function() return KINDS end,
     function() return state.kind end, function(v) state.kind = v end)
   y = y - 26
   local formBoxes = {}
