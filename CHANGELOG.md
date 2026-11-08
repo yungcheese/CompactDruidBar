@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.0.1
+- Fixed the Faerie Fire (Feral) name on the Spells options page
+
 ## v1.0.0
 First release.
 
