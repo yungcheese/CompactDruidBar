@@ -1322,6 +1322,11 @@ local ADDON_SOUNDS = {
 local GAME_SOUNDS = {
   { "ALARM_CLOCK_WARNING_3", "Alarm (game)" },
 }
+-- Original Blizzard sound files, played by FileDataID (nothing is shipped).
+local GAME_FILES = {
+  { 569649, "Clearcasting (original proc)" },
+  { 568922, "Clearcasting alert, druid (original)" },
+}
 -- Sounds borrowed from other installed addons (we don't ship Blizzard files ourselves).
 local EXTERNAL_SOUNDS = {
   { "sao", "Spell proc (Blizzard, via SpellActivationOverlay)", "SpellActivationOverlay",
@@ -1353,6 +1358,7 @@ function ns.GetSoundChoices()
   for _, e in ipairs(EXTERNAL_SOUNDS) do
     if AddonLoaded(e[3]) then list[#list + 1] = { "ext:" .. e[1], e[2] } end
   end
+  for _, g in ipairs(GAME_FILES) do list[#list + 1] = { "fid:" .. g[1], g[2] } end
   for _, s in ipairs(ADDON_SOUNDS) do list[#list + 1] = { "file:" .. s[1], s[2] } end
   for _, g in ipairs(GAME_SOUNDS) do
     if SOUNDKIT and SOUNDKIT[g[1]] then list[#list + 1] = { "kit:" .. g[1], g[2] } end
@@ -1380,6 +1386,10 @@ function ns:PlayAlertSound(key, manual)
     local ok, willPlay = pcall(PlaySoundFile, SOUND_PATH .. val .. ".mp3", ch)
     played = ok and willPlay
     why = "sound file missing"
+  elseif kind == "fid" then
+    local ok, willPlay = pcall(PlaySoundFile, tonumber(val), ch)
+    played = ok and willPlay
+    why = "this game sound file is not available on this client"
   elseif kind == "kit" then
     if SOUNDKIT and SOUNDKIT[val] then
       local ok, willPlay = pcall(PlaySound, SOUNDKIT[val], ch)
