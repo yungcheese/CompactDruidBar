@@ -1186,7 +1186,7 @@ function ns:Debug()
       local state = readable(v) and tostring(v) or "AFGESCHERMD"
       print(("  %s: %s"):format(label, state))
     end
-    print("|cff4fe8ffCompact Druid Bar debug|r (secret-API: " .. tostring(issecretvalue ~= nil) .. ", in combat: " .. tostring(UnitAffectingCombat("player")) .. ")")
+    print("|cff4fe8ffCompact Druid Bar debug|r build 3 (secret-API: " .. tostring(issecretvalue ~= nil) .. ", in combat: " .. tostring(UnitAffectingCombat("player")) .. ")")
     show("Health", UnitHealth("player"))
     show("Health max", UnitHealthMax("player"))
     show("Power type", UnitPowerType("player"))
@@ -1200,12 +1200,18 @@ function ns:Debug()
     if a then show("Eerste buff spellId", a.spellId) else print("  Eerste buff: geen/onleesbaar") end
     local t = UnitExists("target") and ScanAuras("target", "HARMFUL|PLAYER")[1]
     if t then show("Eerste target-debuff spellId", t.spellId) else print("  Target-debuff: geen") end
-    show("Cooldown Dash (start)", (GetCooldown(KnownID("dash") or 1850)))
-    show("Clearcasting nu", HasClearcasting())
-    local mm = ns.modules.mana
-    print(("  Curves beschikbaar: %s, xN via curves: %s%s"):format(
-      tostring(mm.CurvesSupported()), tostring(mm.shiftOK == true),
-      mm.shiftBroken and " (MISLUKT)" or ""))
+    local function try(label, fn)
+      local ok, err = pcall(fn)
+      if not ok then print("  " .. label .. ": FOUT " .. tostring(err)) end
+    end
+    try("Cooldown", function() show("Cooldown Dash (start)", (GetCooldown(KnownID("dash") or 1850))) end)
+    try("Clearcasting", function() show("Clearcasting nu", HasClearcasting()) end)
+    try("Curves", function()
+      local mm = ns.modules.mana
+      print(("  Curves beschikbaar: %s, xN via curves: %s%s"):format(
+        tostring(mm.CurvesSupported()), tostring(mm.shiftOK == true),
+        mm.shiftBroken and " (MISLUKT)" or ""))
+    end)
     print("  UnitHealthPercent: " .. tostring(UnitHealthPercent ~= nil))
     print(("  Energy-tick bekend: %s"):format(tostring(ns.modules.power.lastTick > 0)))
 end
