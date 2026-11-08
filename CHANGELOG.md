@@ -1,6 +1,8 @@
 # Changelog
 
 ## v1.0.2
+- Clearcasting sounds are now shipped with the addon (10 original alert sounds), so they work on every client; also shared with other addons through SharedMedia
+- Custom sound IDs report in chat when the client cannot play them
 - Separate icon size per row (debuffs, cooldowns, buffs); Ctrl+mouse wheel on a row while unlocked
 - Faerie Fire (Feral) and Pounce are now recognized by name, so they work even when the client uses different spell IDs
 

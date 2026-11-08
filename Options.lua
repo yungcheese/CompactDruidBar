@@ -342,15 +342,15 @@ local function BuildGeneral()
   local afterX = Dropdown(c, x, y, 200, ns.GetSoundChoices,
     function() return db().ccSoundKey end,
     function(v) db().ccSoundKey = v; ns.RefreshOptions() end,
-    function(key) ns:PlayAlertSound(key) end)
-  Button(c, afterX + 6, y, 50, "Play", function() ns:PlayAlertSound() end)
+    function(key) ns:PlayAlertSound(key, true) end)
+  Button(c, afterX + 6, y, 50, "Play", function() ns:PlayAlertSound(nil, true) end)
   y = y - 28
 
   local customLabel = Text(c, x, y - 4, "Sound ID:")
   local custom = EditBox(c, x + 60, y, 90)
   custom:SetNumeric(true)
   custom:SetScript("OnTextChanged", function(self) db().ccSoundCustom = self:GetText() end)
-  custom:SetScript("OnEnterPressed", function(self) self:ClearFocus(); ns:PlayAlertSound() end)
+  custom:SetScript("OnEnterPressed", function(self) self:ClearFocus(); ns:PlayAlertSound("custom", true) end)
   local hint = Text(c, x + 166, y - 4, "SoundKit or FileDataID (wago.tools/sounds)")
   hint:SetTextColor(0.6, 0.6, 0.6)
   OnRefresh(function()

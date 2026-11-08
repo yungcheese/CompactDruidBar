@@ -27,7 +27,7 @@ Made for **WoW Forever** and its addon restrictions: it keeps working in combat 
 
 **Clearcasting**
 - Energy bar lights up, a large pulsing icon appears, plus a border flash
-- Choose your sound: Blizzard's spell proc sound, raid warning, alarms and more, SharedMedia sounds, or any SoundKit / FileDataID
+- Choose your sound: 10 alert sounds included with the addon (chimes, bell, shimmer, gong...), SharedMedia sounds from DBM/WeakAuras, or any SoundKit / FileDataID
 
 **Timers and reminders**
 - Your debuffs on the target: Rip, Rake, Pounce, Faerie Fire, Demoralizing Roar, Moonfire, Insect Swarm

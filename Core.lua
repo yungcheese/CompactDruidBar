@@ -41,7 +41,7 @@ local DEFAULTS = {
   fontSize = 10, spacing = 2, oocAlpha = 0.4,
   showText = true, energyTick = true, manaTicks = true, mergeIcons = true,
   ccGlow = true, ccSound = true, ccFlash = true,
-  ccSoundKey = "kit:UI_POWER_AURA_GENERIC", ccSoundChannel = "Master",
+  ccSoundKey = "file:shimmer", ccSoundChannel = "Master",
   bleedWarn = true, consumables = true, cpGlow = true, gcdSpark = true,
   minimap = { hide = true, minimapPos = 220 }, -- same keys LibDBIcon uses
   iconSizes = { debuffs = 22, cooldowns = 22, buffs = 22 }, -- per icon row
@@ -1190,60 +1190,97 @@ local function HasClearcasting()
 end
 
 ------------------------------------------------------------------------
--- Sounds: built-in SoundKits, LibSharedMedia sounds (if another addon
--- provides them) and a custom SoundKit ID / FileDataID (wago.tools/sounds).
+-- Sounds: our own sound files (shipped with the addon, like DBM does, so
+-- they work on every client), LibSharedMedia sounds from other addons, and
+-- a custom SoundKit ID / FileDataID.
 ------------------------------------------------------------------------
--- Only kits that exist in the running client are offered.
-local SOUNDKIT_CHOICES = {
-  { "UI_POWER_AURA_GENERIC", "Spell proc (Blizzard)" },
-  { "RAID_WARNING", "Raid warning" },
-  { "UI_RAID_BOSS_WHISPER_WARNING", "Boss emote" },
-  { "ALARM_CLOCK_WARNING_3", "Alarm" },
-  { "ALARM_CLOCK_WARNING_2", "Alarm (soft)" },
-  { "UI_EPICLOOT_TOAST", "Epic loot" },
-  { "UI_LEGENDARY_LOOT_TOAST", "Legendary loot" },
-  { "UI_WORLDQUEST_COMPLETE", "World quest complete" },
-  { "UI_BNET_TOAST", "Toast" },
-  { "LEVELUP", "Level up" },
-  { "MAP_PING", "Map ping" },
+local SOUND_PATH = "Interface\\AddOns\\" .. ADDON .. "\\sounds\\"
+local ADDON_SOUNDS = {
+  { "shimmer", "Clearcast shimmer" },
+  { "chime", "Chime" },
+  { "doublechime", "Double chime" },
+  { "bell", "Bell" },
+  { "ping", "Ping" },
+  { "pluck", "Pluck" },
+  { "pop", "Pop" },
+  { "alert", "Alert beep" },
+  { "gong", "Gong" },
+  { "whoosh", "Whoosh" },
 }
+local LSM_PREFIX = "CDB: "
+local DEFAULT_SOUND = "file:shimmer"
+ns.DEFAULT_SOUND = DEFAULT_SOUND
 
--- Returns a list of { key, label }. Keys: "kit:NAME", "lsm:Name", "custom".
+local function GetLSM() return LibStub and LibStub("LibSharedMedia-3.0", true) end
+
+-- Share our sounds with other addons (DBM, WeakAuras, ...) through SharedMedia.
+function ns:RegisterSharedMedia()
+  local LSM = GetLSM()
+  if not LSM or self.lsmRegistered then return end
+  self.lsmRegistered = true
+  for _, s in ipairs(ADDON_SOUNDS) do
+    LSM:Register("sound", LSM_PREFIX .. s[2], SOUND_PATH .. s[1] .. ".mp3")
+  end
+end
+
+-- Returns a list of { key, label }. Keys: "file:name", "lsm:Name", "custom".
 function ns.GetSoundChoices()
   local list = {}
-  for _, c in ipairs(SOUNDKIT_CHOICES) do
-    if SOUNDKIT and SOUNDKIT[c[1]] then list[#list + 1] = { "kit:" .. c[1], c[2] } end
-  end
-  local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+  for _, s in ipairs(ADDON_SOUNDS) do list[#list + 1] = { "file:" .. s[1], s[2] } end
+  local LSM = GetLSM()
   if LSM then
     for _, name in ipairs(LSM:List("sound")) do
-      if name ~= "None" then list[#list + 1] = { "lsm:" .. name, name .. " (SharedMedia)" } end
+      if name ~= "None" and name:sub(1, #LSM_PREFIX) ~= LSM_PREFIX then
+        list[#list + 1] = { "lsm:" .. name, name .. " (SharedMedia)" }
+      end
     end
   end
   list[#list + 1] = { "custom", "Custom ID..." }
   return list
 end
 
-function ns:PlayAlertSound(key)
-  key = key or self.db.ccSoundKey
+-- Plays the chosen (or given) sound. Returns true when the client accepted it.
+-- With manual = true (preview), a failure is reported in chat.
+function ns:PlayAlertSound(key, manual)
+  key = key or self.db.ccSoundKey or DEFAULT_SOUND
   local ch = self.db.ccSoundChannel or "Master"
   local kind, val = key:match("^(%a+):(.+)$")
-  if kind == "kit" and SOUNDKIT and SOUNDKIT[val] then
-    if pcall(PlaySound, SOUNDKIT[val], ch) then return end
+  local played, why = false, nil
+  if kind == "file" then
+    local ok, willPlay = pcall(PlaySoundFile, SOUND_PATH .. val .. ".mp3", ch)
+    played = ok and willPlay
+    why = "sound file missing"
   elseif kind == "lsm" then
-    local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
-    local path = LSM and LSM:Fetch("sound", val, true)
-    if path and pcall(PlaySoundFile, path, ch) then return end
+    local LSM = GetLSM()
+    local p = LSM and LSM:Fetch("sound", val, true)
+    if p then
+      local ok, willPlay = pcall(PlaySoundFile, p, ch)
+      played = ok and willPlay
+    end
+    why = "SharedMedia sound not available"
   elseif key == "custom" then
     local id = tonumber(self.db.ccSoundCustom or "")
     if id then
       -- Try as SoundKit ID first, then as FileDataID.
-      local ok, played = pcall(PlaySound, id, ch)
-      if ok and played then return end
-      if pcall(PlaySoundFile, id, ch) then return end
+      local ok, willPlay = pcall(PlaySound, id, ch)
+      played = ok and willPlay
+      if not played then
+        ok, willPlay = pcall(PlaySoundFile, id, ch)
+        played = ok and willPlay
+      end
+      why = "ID " .. id .. " is not a playable SoundKit ID or FileDataID on this client"
+    else
+      why = "no sound ID entered"
     end
   end
-  pcall(PlaySound, 8959, ch) -- fallback: raid warning
+  if not played then
+    if manual then
+      print("|cff4fe8ffCompact Druid Bar|r: could not play this sound (" .. (why or "unknown") .. ").")
+    elseif key ~= DEFAULT_SOUND then
+      return self:PlayAlertSound(DEFAULT_SOUND) -- fall back to our own sound
+    end
+  end
+  return played
 end
 
 function ns:OnClearcastStart()
@@ -1578,6 +1615,10 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
       CompactDruidBarDB.iconSizes = { debuffs = s, cooldowns = s, buffs = s }
     end
     ns.db = CopyDefaults(DEFAULTS, CompactDruidBarDB)
+    -- Upgrade: the old game-sound choices ("kit:...") are gone, use our own sound.
+    if type(ns.db.ccSoundKey) == "string" and ns.db.ccSoundKey:sub(1, 4) == "kit:" then
+      ns.db.ccSoundKey = ns.DEFAULT_SOUND
+    end
     for _, key in ipairs(ns.MODULE_ORDER) do CreateMover(ns.modules[key]) end
     if ns.BuildOptions then ns:BuildOptions() end
 
@@ -1637,7 +1678,10 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
   if not ns.db then return end
 
   -- All addons are loaded by now, so LibDBIcon from other addons is available.
-  if event == "PLAYER_ENTERING_WORLD" then ns:SetupMinimap() end
+  if event == "PLAYER_ENTERING_WORLD" then
+    ns:SetupMinimap()
+    ns:RegisterSharedMedia()
+  end
 
   if event == "PLAYER_ENTERING_WORLD" or event == "UPDATE_SHAPESHIFT_FORM" or event == "UPDATE_SHAPESHIFT_FORMS"
     or event == "SPELLS_CHANGED" or event == "CHARACTER_POINTS_CHANGED" or event == "UNIT_DISPLAYPOWER"
