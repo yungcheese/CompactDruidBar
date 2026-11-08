@@ -1,83 +1,162 @@
 -- Compact Druid Bar - options panel (Esc > Options > AddOns > Compact Druid Bar, or /cdb)
+-- Two pages: General (layout, display, alerts) and Spells (custom + built-in spells).
 
 local ADDON, ns = ...
 
-function ns:BuildOptions()
+local refreshers = {}
+local function OnRefresh(fn) refreshers[#refreshers + 1] = fn end
+function ns.RefreshOptions()
+  for _, r in ipairs(refreshers) do r() end
+end
+
+------------------------------------------------------------------------
+-- Widget helpers (no fragile templates; everything works on old + new clients)
+------------------------------------------------------------------------
+local function MakePage(name, height)
+  local panel = CreateFrame("Frame")
+  panel.name = name
+  local content = panel
+  local ok, scroll = pcall(CreateFrame, "ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
+  if ok and scroll then
+    scroll:SetPoint("TOPLEFT", 0, -4)
+    scroll:SetPoint("BOTTOMRIGHT", -28, 4)
+    content = CreateFrame("Frame", nil, scroll)
+    content:SetSize(660, height)
+    scroll:SetScrollChild(content)
+  end
+  panel:SetScript("OnShow", ns.RefreshOptions)
+  return panel, content
+end
+
+local function Text(parent, x, y, text, font)
+  local fs = parent:CreateFontString(nil, "ARTWORK", font or "GameFontHighlightSmall")
+  fs:SetPoint("TOPLEFT", x, y)
+  fs:SetJustifyH("LEFT")
+  fs:SetText(text)
+  return fs
+end
+local function Header(parent, x, y, text) return Text(parent, x, y, text, "GameFontNormal") end
+
+local function Checkbox(parent, x, y, label, get, set)
+  local cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
+  cb:SetPoint("TOPLEFT", x, y)
+  cb:SetSize(24, 24)
+  cb.label = cb:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+  cb.label:SetPoint("LEFT", cb, "RIGHT", 2, 0)
+  cb.label:SetText(label)
+  cb:SetScript("OnClick", function(self)
+    set(self:GetChecked() and true or false)
+    ns:Refresh()
+  end)
+  OnRefresh(function() cb:SetChecked(get() and true or false) end)
+  return cb
+end
+
+local function Button(parent, x, y, w, text, onClick)
+  local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+  b:SetPoint("TOPLEFT", x, y)
+  b:SetSize(w, 22)
+  b:SetText(text)
+  b:SetScript("OnClick", onClick)
+  return b
+end
+
+local function EditBox(parent, x, y, w)
+  local e = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+  e:SetPoint("TOPLEFT", x + 6, y)
+  e:SetSize(w, 20)
+  e:SetAutoFocus(false)
+  e:SetScript("OnEscapePressed", e.ClearFocus)
+  return e
+end
+
+local function Slider(parent, x, y, label, min, max, step, key, fmt)
   local TEX = ns.TEX
+  local s = CreateFrame("Slider", nil, parent, "BackdropTemplate")
+  s:SetPoint("TOPLEFT", x, y - 16)
+  s:SetSize(220, 12)
+  s:SetOrientation("HORIZONTAL")
+  s:SetBackdrop({ bgFile = TEX, edgeFile = TEX, edgeSize = 1 })
+  s:SetBackdropColor(0, 0, 0, 0.5)
+  s:SetBackdropBorderColor(0.4, 0.4, 0.4, 1)
+  s:SetThumbTexture(TEX)
+  local th = s:GetThumbTexture()
+  th:SetSize(8, 16)
+  th:SetVertexColor(1, 0.8, 0.1)
+  s:SetMinMaxValues(min, max)
+  s:SetValueStep(step)
+  if s.SetObeyStepOnDrag then s:SetObeyStepOnDrag(true) end
+  s:EnableMouseWheel(true)
+  local t = s:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+  t:SetPoint("BOTTOMLEFT", s, "TOPLEFT", 0, 3)
+  local function Label(v) t:SetText(label .. ": " .. string.format(fmt or "%d", v)) end
+  s:SetScript("OnValueChanged", function(self, v)
+    v = math.floor(v / step + 0.5) * step
+    Label(v)
+    if self.updating then return end
+    ns.db[key] = v
+    ns:Layout()
+    ns:UpdateAll()
+  end)
+  s:SetScript("OnMouseWheel", function(self, delta) self:SetValue(self:GetValue() + delta * step) end)
+  OnRefresh(function()
+    s.updating = true
+    s:SetValue(ns.db[key])
+    Label(ns.db[key])
+    s.updating = false
+  end)
+end
+
+-- "< value >" selector that cycles through a list.
+local function Cycler(parent, x, y, w, getList, get, set)
+  local prev = Button(parent, x, y, 24, "<", nil)
+  local box = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+  box:SetPoint("TOPLEFT", x + 26, y)
+  box:SetSize(w, 22)
+  box:SetBackdrop({ bgFile = ns.TEX, edgeFile = ns.TEX, edgeSize = 1 })
+  box:SetBackdropColor(0, 0, 0, 0.5)
+  box:SetBackdropBorderColor(0.4, 0.4, 0.4, 1)
+  local label = box:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+  label:SetPoint("CENTER")
+  label:SetWidth(w - 6)
+  local nextB = Button(parent, x + 28 + w, y, 24, ">", nil)
+  local function Index(list)
+    local cur = get()
+    for i, item in ipairs(list) do if item[1] == cur then return i end end
+    return 1
+  end
+  local function Show()
+    local list = getList()
+    local item = list[Index(list)]
+    label:SetText(item and item[2] or "-")
+  end
+  local function Step(d)
+    local list = getList()
+    if #list == 0 then return end
+    local i = (Index(list) - 1 + d) % #list + 1
+    set(list[i][1])
+    Show()
+  end
+  prev:SetScript("OnClick", function() Step(-1) end)
+  nextB:SetScript("OnClick", function() Step(1) end)
+  OnRefresh(Show)
+  return x + 28 + w + 26 -- x after the control
+end
+
+------------------------------------------------------------------------
+-- Page 1: General
+------------------------------------------------------------------------
+local function BuildGeneral()
+  local panel, c = MakePage("Compact Druid Bar", 720)
   local db = function() return ns.db end
-  local panel = CreateFrame("Frame", "CompactDruidBarOptions")
-  panel.name = "Compact Druid Bar"
-  local refreshers = {}
 
-  local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-  title:SetPoint("TOPLEFT", 16, -16)
-  title:SetText("Compact Druid Bar")
-  local sub = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-  sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
-  sub:SetWidth(600)
-  sub:SetJustifyH("LEFT")
-  sub:SetText("Unlock to move. Drag moves the bar, Shift+drag detaches an element, right-click attaches it again, mouse wheel scales.")
-
-  local function Header(x, y, text)
-    local h = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    h:SetPoint("TOPLEFT", x, y)
-    h:SetText(text)
-  end
-
-  local function Checkbox(x, y, label, get, set)
-    local cb = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
-    cb:SetPoint("TOPLEFT", x, y)
-    cb:SetSize(24, 24)
-    local t = cb:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    t:SetPoint("LEFT", cb, "RIGHT", 2, 0)
-    t:SetText(label)
-    cb:SetScript("OnClick", function(self)
-      set(self:GetChecked() and true or false)
-      ns:Refresh()
-    end)
-    refreshers[#refreshers + 1] = function() cb:SetChecked(get() and true or false) end
-    return cb
-  end
-
-  local function Slider(x, y, label, min, max, step, key, fmt)
-    local s = CreateFrame("Slider", nil, panel, "BackdropTemplate")
-    s:SetPoint("TOPLEFT", x, y - 16)
-    s:SetSize(220, 12)
-    s:SetOrientation("HORIZONTAL")
-    s:SetBackdrop({ bgFile = TEX, edgeFile = TEX, edgeSize = 1 })
-    s:SetBackdropColor(0, 0, 0, 0.5)
-    s:SetBackdropBorderColor(0.4, 0.4, 0.4, 1)
-    s:SetThumbTexture(TEX)
-    local th = s:GetThumbTexture()
-    th:SetSize(8, 16)
-    th:SetVertexColor(1, 0.8, 0.1)
-    s:SetMinMaxValues(min, max)
-    s:SetValueStep(step)
-    if s.SetObeyStepOnDrag then s:SetObeyStepOnDrag(true) end
-    s:EnableMouseWheel(true)
-    local t = s:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-    t:SetPoint("BOTTOMLEFT", s, "TOPLEFT", 0, 3)
-    local function Label(v) t:SetText(label .. ": " .. string.format(fmt or "%d", v)) end
-    s:SetScript("OnValueChanged", function(self, v)
-      v = math.floor(v / step + 0.5) * step
-      Label(v)
-      if self.updating then return end
-      db()[key] = v
-      ns:Layout()
-      ns:UpdateAll()
-    end)
-    s:SetScript("OnMouseWheel", function(self, delta) self:SetValue(self:GetValue() + delta * step) end)
-    refreshers[#refreshers + 1] = function()
-      s.updating = true
-      s:SetValue(db()[key])
-      Label(db()[key])
-      s.updating = false
-    end
-  end
+  Text(c, 16, -16, "Compact Druid Bar", "GameFontNormalLarge")
+  local sub = Text(c, 16, -40, "Unlock to move. Drag moves the bar, Shift+drag detaches an element, right-click attaches it again, mouse wheel scales.")
+  sub:SetWidth(620)
 
   -- Left column: size
   local x, y = 16, -70
-  Header(x, y, "Size")
+  Header(c, x, y, "Size")
   y = y - 20
   local sliders = {
     { "Scale (bar)", 0.3, 3, 0.05, "scale", "%.2f" },
@@ -90,22 +169,36 @@ function ns:BuildOptions()
     { "Out of combat opacity", 0, 1, 0.05, "oocAlpha", "%.2f" },
   }
   for _, sl in ipairs(sliders) do
-    Slider(x, y, sl[1], sl[2], sl[3], sl[4], sl[5], sl[6])
+    Slider(c, x, y, sl[1], sl[2], sl[3], sl[4], sl[5], sl[6])
     y = y - 42
   end
 
-  -- Right column: elements
-  x, y = 300, -70
-  Header(x, y, "Elements")
-  local los = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-  los:SetPoint("TOPLEFT", x + 190, y)
-  los:SetText("Detach")
+  y = y - 6
+  local lockBtn = Button(c, 16, y, 140, "", function() ns:SetLocked(not db().locked) end)
+  OnRefresh(function() lockBtn:SetText(db().locked and "Unlock" or "Lock") end)
+  Button(c, 162, y, 120, "Test clearcast", function() ns:TestClearcast() end)
+  y = y - 28
+  Button(c, 16, y, 140, "Reset positions", function() ns:ResetPositions(); ns.RefreshOptions() end)
+  Button(c, 162, y, 120, "Reset all", function() ns:ResetAll(); ns.RefreshOptions() end)
+
+  y = y - 40
+  Header(c, x, y, "Extras")
+  y = y - 20
+  Checkbox(c, x, y, "Rip/Rake refresh warning (last 2 sec)", function() return db().bleedWarn end, function(v) db().bleedWarn = v end); y = y - 24
+  Checkbox(c, x, y, "Mana potion + rune cooldowns", function() return db().consumables end, function(v) db().consumables = v end); y = y - 24
+  Checkbox(c, x, y, "Glow at 5 combo points", function() return db().cpGlow end, function(v) db().cpGlow = v end); y = y - 24
+  Checkbox(c, x, y, "GCD spark on power bar", function() return db().gcdSpark end, function(v) db().gcdSpark = v end); y = y - 24
+
+  -- Right column: elements, display, clearcasting
+  x, y = 320, -70
+  Header(c, x, y, "Elements")
+  Text(c, x + 190, y, "Detach", "GameFontNormalSmall")
   y = y - 20
   for _, key in ipairs(ns.MODULE_ORDER) do
-    Checkbox(x, y, ns.MODULE_LABELS[key],
+    Checkbox(c, x, y, ns.MODULE_LABELS[key],
       function() return db().modules[key].enabled end,
       function(v) db().modules[key].enabled = v end)
-    Checkbox(x + 186, y, "",
+    Checkbox(c, x + 186, y, "",
       function() return db().modules[key].detached end,
       function(v)
         if v then ns:Detach(ns.modules[key]) else ns:Attach(ns.modules[key]) end
@@ -114,56 +207,189 @@ function ns:BuildOptions()
   end
 
   y = y - 10
-  Header(x, y, "Display")
+  Header(c, x, y, "Display")
   y = y - 20
-  Checkbox(x, y, "Text on bars", function() return db().showText end, function(v) db().showText = v end); y = y - 24
-  Checkbox(x, y, "Energy-tick timer", function() return db().energyTick end, function(v) db().energyTick = v end); y = y - 24
-  Checkbox(x, y, "Powershift marks on mana", function() return db().manaTicks end, function(v) db().manaTicks = v end); y = y - 24
-  Checkbox(x, y, "Merge icons onto one line", function() return db().mergeIcons end, function(v) db().mergeIcons = v end); y = y - 24
+  Checkbox(c, x, y, "Text on bars", function() return db().showText end, function(v) db().showText = v end); y = y - 24
+  Checkbox(c, x, y, "Energy tick timer", function() return db().energyTick end, function(v) db().energyTick = v end); y = y - 24
+  Checkbox(c, x, y, "Powershift marks on mana", function() return db().manaTicks end, function(v) db().manaTicks = v end); y = y - 24
+  Checkbox(c, x, y, "Merge icons onto one line", function() return db().mergeIcons end, function(v) db().mergeIcons = v end); y = y - 24
 
   y = y - 10
-  Header(x, y, "Clearcasting")
+  Header(c, x, y, "Clearcasting")
   y = y - 20
-  Checkbox(x, y, "Highlight energy bar", function() return db().ccGlow end, function(v) db().ccGlow = v end); y = y - 24
-  Checkbox(x, y, "Sound", function() return db().ccSound end, function(v) db().ccSound = v end); y = y - 24
-  Checkbox(x, y, "Border flash", function() return db().ccFlash end, function(v) db().ccFlash = v end); y = y - 24
+  Checkbox(c, x, y, "Highlight energy bar", function() return db().ccGlow end, function(v) db().ccGlow = v end); y = y - 24
+  Checkbox(c, x, y, "Border flash", function() return db().ccFlash end, function(v) db().ccFlash = v end); y = y - 24
+  Checkbox(c, x, y, "Sound", function() return db().ccSound end, function(v) db().ccSound = v end); y = y - 28
 
-  -- Buttons
-  local function Button(bx, by, w, text, onClick)
-    local b = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-    b:SetPoint("TOPLEFT", bx, by)
-    b:SetSize(w, 24)
-    b:SetText(text)
-    b:SetScript("OnClick", onClick)
-    return b
-  end
-  local by = -70 - 20 - 42 * #sliders - 10
-  local lockBtn = Button(16, by, 140, "", function() ns:SetLocked(not db().locked) end)
-  refreshers[#refreshers + 1] = function() lockBtn:SetText(db().locked and "Unlock" or "Lock") end
-  Button(162, by, 120, "Test clearcast", function() ns:TestClearcast() end)
-  Button(16, by - 30, 140, "Reset positions", function() ns:ResetPositions(); ns.RefreshOptions() end)
-  Button(162, by - 30, 120, "Reset all", function() ns:ResetAll(); ns.RefreshOptions() end)
+  -- Sound picker
+  local afterX = Cycler(c, x, y, 150, ns.GetSoundChoices,
+    function() return db().ccSoundKey end,
+    function(v) db().ccSoundKey = v; ns.RefreshOptions() end)
+  Button(c, afterX + 4, y, 50, "Play", function() ns:PlayAlertSound() end)
+  y = y - 28
 
-  function ns.RefreshOptions()
-    for _, r in ipairs(refreshers) do r() end
-  end
-  panel:SetScript("OnShow", ns.RefreshOptions)
+  local customLabel = Text(c, x, y - 4, "Sound ID:")
+  local custom = EditBox(c, x + 60, y, 90)
+  custom:SetNumeric(true)
+  custom:SetScript("OnTextChanged", function(self) db().ccSoundCustom = self:GetText() end)
+  custom:SetScript("OnEnterPressed", function(self) self:ClearFocus(); ns:PlayAlertSound() end)
+  local hint = Text(c, x + 166, y - 4, "SoundKit or FileDataID (wago.tools/sounds)")
+  hint:SetTextColor(0.6, 0.6, 0.6)
+  OnRefresh(function()
+    local show = db().ccSoundKey == "custom"
+    customLabel:SetShown(show); custom:SetShown(show); hint:SetShown(show)
+    if not custom:HasFocus() then custom:SetText(db().ccSoundCustom or "") end
+  end)
+  y = y - 28
 
-  if Settings and Settings.RegisterCanvasLayoutCategory then
-    local cat = Settings.RegisterCanvasLayoutCategory(panel, panel.name)
-    Settings.RegisterAddOnCategory(cat)
-    ns.category = cat
-  elseif InterfaceOptions_AddCategory then
-    InterfaceOptions_AddCategory(panel)
-  end
-  ns.optionsPanel = panel
+  Text(c, x, y - 4, "Channel:")
+  Cycler(c, x + 60, y, 90,
+    function() return { { "Master", "Master" }, { "SFX", "Effects" }, { "Ambience", "Ambience" }, { "Dialog", "Dialog" } } end,
+    function() return db().ccSoundChannel end,
+    function(v) db().ccSoundChannel = v end)
+
+  return panel
 end
 
-function ns:OpenOptions()
-  if self.category and Settings and Settings.OpenToCategory then
-    Settings.OpenToCategory(self.category:GetID())
+------------------------------------------------------------------------
+-- Page 2: Spells
+------------------------------------------------------------------------
+local KINDS = { { "cd", "Cooldown" }, { "buff", "Buff on me" }, { "debuff", "Debuff on target" } }
+
+local function BuildSpells()
+  local panel, c = MakePage("Spells", 760)
+  local db = function() return ns.db end
+  local state = { kind = "cd", forms = { cat = true, bear = false, caster = false } }
+
+  Text(c, 16, -16, "Spells", "GameFontNormalLarge")
+  local sub = Text(c, 16, -40, "Add your own cooldowns, buffs or debuffs to the bar, or hide built-in ones. Spell names work for spells in your spellbook; use the spell ID for anything else (e.g. trinket buffs).")
+  sub:SetWidth(620)
+
+  -- Add form
+  local x, y = 16, -84
+  Header(c, x, y, "Add a spell")
+  y = y - 22
+  local input = EditBox(c, x, y, 180)
+  Cycler(c, x + 196, y, 110, function() return KINDS end,
+    function() return state.kind end, function(v) state.kind = v end)
+  y = y - 26
+  local formBoxes = {}
+  for i, f in ipairs({ { "cat", "Cat" }, { "bear", "Bear" }, { "caster", "Caster" } }) do
+    local cb = CreateFrame("CheckButton", nil, c, "UICheckButtonTemplate")
+    cb:SetPoint("TOPLEFT", x + (i - 1) * 80, y)
+    cb:SetSize(24, 24)
+    local t = cb:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    t:SetPoint("LEFT", cb, "RIGHT", 2, 0)
+    t:SetText(f[2])
+    cb:SetChecked(state.forms[f[1]])
+    cb:SetScript("OnClick", function(self) state.forms[f[1]] = self:GetChecked() and true or false end)
+    formBoxes[f[1]] = cb
+  end
+  local status = Text(c, x, y - 52, "")
+  status:SetWidth(330)
+  local function Add()
+    local ok, msg = ns:AddCustom(input:GetText(), state.kind, state.forms)
+    status:SetText(msg)
+    if ok then status:SetTextColor(0.4, 1, 0.4); input:SetText("") else status:SetTextColor(1, 0.4, 0.4) end
+    ns.RefreshOptions()
+  end
+  Button(c, x + 244, y, 80, "Add", Add)
+  input:SetScript("OnEnterPressed", function(self) self:ClearFocus(); Add() end)
+
+  -- Custom list
+  y = y - 90
+  Header(c, x, y, "Your spells")
+  local empty = Text(c, x, y - 22, "None yet.")
+  empty:SetTextColor(0.6, 0.6, 0.6)
+  local rows = {}
+  local listY = y - 22
+  local function Row(i)
+    if rows[i] then return rows[i] end
+    local r = CreateFrame("Frame", nil, c)
+    r:SetSize(340, 22)
+    r:SetPoint("TOPLEFT", x, listY - (i - 1) * 24)
+    r.icon = r:CreateTexture(nil, "ARTWORK")
+    r.icon:SetSize(18, 18)
+    r.icon:SetPoint("LEFT")
+    r.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    r.text = r:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    r.text:SetPoint("LEFT", r.icon, "RIGHT", 6, 0)
+    r.text:SetWidth(280)
+    r.text:SetJustifyH("LEFT")
+    r.del = CreateFrame("Button", nil, r, "UIPanelButtonTemplate")
+    r.del:SetSize(24, 20)
+    r.del:SetPoint("RIGHT")
+    r.del:SetText("X")
+    rows[i] = r
+    return r
+  end
+  OnRefresh(function()
+    local list = db().custom
+    empty:SetShown(#list == 0)
+    for i, sp in ipairs(list) do
+      local r = Row(i)
+      local forms = {}
+      if sp.forms.cat then forms[#forms + 1] = "Cat" end
+      if sp.forms.bear then forms[#forms + 1] = "Bear" end
+      if sp.forms.caster then forms[#forms + 1] = "Caster" end
+      r.icon:SetTexture((C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(sp.id)) or 134400)
+      r.text:SetText(("%s |cff888888(%d)|r - %s - %s"):format(sp.name or "?", sp.id, ns.KIND_LABELS[sp.kind] or sp.kind, table.concat(forms, ", ")))
+      r.del:SetScript("OnClick", function() ns:RemoveCustom(i); ns.RefreshOptions() end)
+      r:Show()
+    end
+    for i = #list + 1, #rows do rows[i]:Hide() end
+  end)
+
+  -- Built-in spells (right column)
+  x, y = 380, -84
+  Header(c, x, y, "Built-in spells")
+  y = y - 20
+  for _, group in ipairs(ns.BUILTIN) do
+    local h = Text(c, x, y - 4, group.cat, "GameFontNormalSmall")
+    h:SetTextColor(0.8, 0.8, 0.8)
+    y = y - 20
+    for _, key in ipairs(group.keys) do
+      local cb = Checkbox(c, x, y, key,
+        function() return not db().hidden[key] end,
+        function(v) db().hidden[key] = (not v) or nil end)
+      OnRefresh(function() cb.label:SetText(ns.KeyName(key)) end)
+      y = y - 22
+    end
+    y = y - 4
+  end
+
+  return panel
+end
+
+------------------------------------------------------------------------
+-- Registration
+------------------------------------------------------------------------
+function ns:BuildOptions()
+  local general = BuildGeneral()
+  local spells = BuildSpells()
+  if Settings and Settings.RegisterCanvasLayoutCategory then
+    local cat = Settings.RegisterCanvasLayoutCategory(general, general.name)
+    Settings.RegisterAddOnCategory(cat)
+    ns.category = cat
+    if Settings.RegisterCanvasLayoutSubcategory then
+      local ok, sub = pcall(Settings.RegisterCanvasLayoutSubcategory, cat, spells, spells.name)
+      if ok then ns.spellsCategory = sub end
+    end
+  elseif InterfaceOptions_AddCategory then
+    InterfaceOptions_AddCategory(general)
+    spells.parent = general.name
+    InterfaceOptions_AddCategory(spells)
+  end
+  ns.optionsPanel, ns.spellsPanel = general, spells
+end
+
+function ns:OpenOptions(page)
+  local cat = (page == "spells" and self.spellsCategory) or self.category
+  if cat and Settings and Settings.OpenToCategory then
+    Settings.OpenToCategory(cat:GetID())
   elseif InterfaceOptionsFrame_OpenToCategory then
-    InterfaceOptionsFrame_OpenToCategory(self.optionsPanel)
-    InterfaceOptionsFrame_OpenToCategory(self.optionsPanel)
+    local p = (page == "spells") and self.spellsPanel or self.optionsPanel
+    InterfaceOptionsFrame_OpenToCategory(p)
+    InterfaceOptionsFrame_OpenToCategory(p)
   end
 end

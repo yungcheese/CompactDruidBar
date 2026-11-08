@@ -9,6 +9,11 @@ A compact, fully scalable druid bar for **WoW Forever** (client 1.60.1, interfac
 - **Energy tick timer**: a white spark runs across the energy bar and reaches the end on the next tick
 - **Clearcasting alerts**: the energy bar lights up, a large pulsing icon appears, plus a sound and a border flash
 - **Target debuffs** (Rip, Rake, Pounce, Faerie Fire / Demoralizing Roar / Moonfire, Insect Swarm), **cooldowns** and **buffs** (Mark of the Wild, Thorns, Tiger's Fury, Nature's Grasp), centered on one line
+- **Rip/Rake refresh warning**: the icon blinks red during its last 2 seconds
+- **Mana consumables**: cooldown and count of your best mana potion and Demonic/Dark Rune
+- **Glow at 5 combo points** and a **GCD spark** on the power bar
+- **Choose your clearcasting sound**: built-in alerts, SharedMedia sounds, or any SoundKit/FileDataID from [wago.tools/sounds](https://wago.tools/sounds)
+- **Add your own spells** (cooldowns, buffs, debuffs per form) and hide built-in ones on the *Spells* options page
 - Only shows spells you know, so it grows with you while leveling
 - Dimmed out of combat
 
@@ -22,6 +27,7 @@ Then restart the game (or `/reload`) and enable the addon in the AddOns menu on 
 | Command | Action |
 |---|---|
 | `/cdb` | Open the options panel |
+| `/cdb spells` | Open the Spells page (custom + built-in spells) |
 | `/cdb unlock` / `/cdb lock` | Toggle move mode |
 | `/cdb scale 1.2` | Set the bar scale |
 | `/cdb reset` | Reset positions and scale |

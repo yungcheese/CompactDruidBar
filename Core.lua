@@ -41,8 +41,12 @@ local DEFAULTS = {
   fontSize = 10, spacing = 2, oocAlpha = 0.4,
   showText = true, energyTick = true, manaTicks = true, mergeIcons = true,
   ccGlow = true, ccSound = true, ccFlash = true,
+  ccSoundKey = "kit:ALARM_CLOCK_WARNING_3", ccSoundChannel = "Master",
+  bleedWarn = true, consumables = true, cpGlow = true, gcdSpark = true,
   point = { "CENTER", "UIParent", "CENTER", 0, -160 },
   modules = {},
+  custom = {},   -- { id, name, kind = "cd"|"buff"|"debuff", forms = { cat, bear, caster } }
+  hidden = {},   -- [builtinKey] = true
 }
 for _, k in ipairs(ns.MODULE_ORDER) do
   DEFAULTS.modules[k] = { enabled = true, detached = false, scale = 1 }
@@ -146,14 +150,42 @@ local function PowerCost(id)
   return costs[1].cost
 end
 local function GetCooldown(id)
-  if C_Spell and C_Spell.GetSpellCooldown then
-    local info = C_Spell.GetSpellCooldown(id)
-    if info then return info.startTime, info.duration end
-  elseif GetSpellCooldown then
-    local s, d = GetSpellCooldown(id)
-    return s, d
-  end
+  local ok, s, d = pcall(function()
+    if C_Spell and C_Spell.GetSpellCooldown then
+      local info = C_Spell.GetSpellCooldown(id)
+      if info then return info.startTime, info.duration end
+    elseif GetSpellCooldown then
+      return GetSpellCooldown(id)
+    end
+  end)
+  if ok then return s, d end
 end
+
+-- Built-in spells per category (used by the Spells options page).
+ns.S = S
+ns.BUILTIN = {
+  { cat = "Debuffs", keys = { "rip", "rake", "pounce", "ffFeral", "ff", "demo", "moonfire", "swarm" } },
+  { cat = "Cooldowns", keys = { "dash", "grasp", "barkskin", "innervate", "rebirth", "bash", "charge", "enrage", "frenzied", "swiftmend", "nswift", "hurricane" } },
+  { cat = "Buffs", keys = { "motw", "thorns", "tigers" } },
+}
+function ns.SpellName(id)
+  if C_Spell and C_Spell.GetSpellName then return C_Spell.GetSpellName(id) end
+  if GetSpellInfo then return (GetSpellInfo(id)) end
+end
+function ns.KeyName(key)
+  local ids = S[key]
+  local n = ids and ns.SpellName(ids[1]) or key
+  if key == "ffFeral" then n = (n or "Faerie Fire") .. " (Feral)" end
+  if key == "pounce" then n = (n or "Pounce") end
+  return n or key
+end
+local function Hidden(key) return ns.db and ns.db.hidden[key] end
+
+-- Mana consumables (best item first). Potions share a cooldown, runes too.
+local CONSUMABLES = {
+  { 13444, 13443, 6149, 3827, 3385, 2455 }, -- Major .. Minor Mana Potion
+  { 12662, 20520 },                          -- Demonic Rune, Dark Rune
+}
 
 local function FormGroup()
   local id = GetShapeshiftFormID and GetShapeshiftFormID()
@@ -227,6 +259,12 @@ local function CreateIcon(parent)
   f.cd:SetAllPoints(f.tex)
   f.cd:SetDrawEdge(false)
   if f.cd.SetHideCountdownNumbers then f.cd:SetHideCountdownNumbers(false) end
+  -- Stack/item count in the bottom-right corner, above the cooldown swipe.
+  local over = CreateFrame("Frame", nil, f)
+  over:SetAllPoints()
+  over:SetFrameLevel(f.cd:GetFrameLevel() + 2)
+  f.count = NewFS(over, "RIGHT")
+  f.count:SetPoint("BOTTOMRIGHT", -1, 1)
   return f
 end
 
@@ -396,7 +434,28 @@ do
     self.lastPower = e
   end
 
+  -- GCD spark: a thin line along the bottom of the power bar that fills during the global cooldown.
+  m.gcd = m.bar.bar:CreateTexture(nil, "OVERLAY", nil, 7)
+  m.gcd:SetColorTexture(1, 1, 1, 0.85)
+  m.gcd:SetHeight(2)
+  m.gcd:SetPoint("BOTTOMLEFT", m.bar.bar, "BOTTOMLEFT", 0, 0)
+  m.gcd:Hide()
+
   m.frame:SetScript("OnUpdate", function()
+    if ns.db and ns.db.gcdSpark then
+      local s, d = GetCooldown(61304) -- 61304 = global cooldown
+      local shown = false
+      if readable(s, d) and s and d and d > 0 then
+        local p = (GetTime() - s) / d
+        if p >= 0 and p < 1 then
+          m.gcd:SetWidth(math.max(1, m.bar.bar:GetWidth() * p))
+          shown = true
+        end
+      end
+      m.gcd:SetShown(shown)
+    else
+      m.gcd:Hide()
+    end
     if ns.db and ns.db.energyTick and m.lastTick > 0 and UnitPowerType("player") == 3 then
       local w = m.bar.bar:GetWidth()
       local x = w * (((GetTime() - m.lastTick) % 2) / 2)
@@ -425,6 +484,21 @@ do
     s.fill:SetColorTexture(1, 0.75, 0.1)
     m.segs[i] = s
   end
+  -- Glow around the combo bar at 5 combo points (finisher time).
+  m.glow = m.frame:CreateTexture(nil, "BACKGROUND")
+  m.glow:SetPoint("TOPLEFT", -3, 3)
+  m.glow:SetPoint("BOTTOMRIGHT", 3, -3)
+  m.glow:SetColorTexture(1, 0.35, 0.1, 0.8)
+  m.glow:Hide()
+  do
+    local ag = m.glow:CreateAnimationGroup()
+    ag:SetLooping("BOUNCE")
+    local a = ag:CreateAnimation("Alpha")
+    a:SetFromAlpha(1)
+    a:SetToAlpha(0.25)
+    a:SetDuration(0.4)
+    m.glowAnim = ag
+  end
   function m:Resize(w)
     local h, gap = ns.db.smallBarHeight, 2
     self.frame:SetSize(w, h)
@@ -450,6 +524,15 @@ do
       s.fill:SetShown(ok and on)
       local ok5, full = pcall(function() return cp >= 5 end)
       if ok5 and full then s.fill:SetColorTexture(1, 0.3, 0.15) else s.fill:SetColorTexture(1, 0.75, 0.1) end
+    end
+    local ok5, full = pcall(function() return cp >= 5 end)
+    local glow = ns.db.cpGlow and ok5 and full
+    if glow then
+      self.glow:Show()
+      if not self.glowAnim:IsPlaying() then self.glowAnim:Play() end
+    else
+      self.glowAnim:Stop()
+      self.glow:Hide()
     end
   end
 end
@@ -614,31 +697,69 @@ local function IconRow(key)
   return m
 end
 
+-- Aura / custom spell helpers ---------------------------------------
+local function IndexAuras(auras)
+  local byKey, byId, byName = {}, {}, {}
+  for _, a in ipairs(auras) do
+    if not readable(a.spellId) then return nil end -- IDs are secret
+    local k = SPELL_TO_KEY[a.spellId]
+    if k then byKey[k] = byKey[k] or a end
+    byId[a.spellId] = a
+    if readable(a.name) and a.name then byName[a.name] = a end
+  end
+  return byKey, byId, byName
+end
+local function CustomFor(kind)
+  local list = {}
+  for _, c in ipairs(ns.db.custom) do
+    if c.kind == kind and c.forms and c.forms[ns.form] then list[#list + 1] = c end
+  end
+  return list
+end
+local function CustomIcon(c) return SpellIcon(c.id) or 134400 end
+local function ItemCooldown(id)
+  local ok, s, d = pcall(function()
+    if C_Container and C_Container.GetItemCooldown then return C_Container.GetItemCooldown(id) end
+    if GetItemCooldown then return GetItemCooldown(id) end
+  end)
+  if ok then return s, d end
+end
+local function ItemCount(id)
+  if C_Item and C_Item.GetItemCount then return C_Item.GetItemCount(id) end
+  if GetItemCount then return GetItemCount(id) end
+  return 0
+end
+local function ItemIcon(id)
+  if C_Item and C_Item.GetItemIconByID then return C_Item.GetItemIconByID(id) end
+  if GetItemIcon then return GetItemIcon(id) end
+end
+
+local BLEEDS = { rip = true, rake = true }
+
 -- Target debuffs ----------------------------------------------------
 do
   local m = IconRow("debuffs")
   function m:Rebuild()
     self.slots = {}
     for _, slot in ipairs(DEBUFF_SLOTS[ns.form] or {}) do
-      local iconID
+      local iconID, warn
       for _, k in ipairs(slot) do
-        local id = KnownID(k)
+        local id = not Hidden(k) and KnownID(k)
         if id then iconID = iconID or id end
+        if BLEEDS[k] then warn = true end
       end
-      if iconID then self.slots[#self.slots + 1] = { keys = slot, icon = SpellIcon(iconID) } end
+      if iconID then self.slots[#self.slots + 1] = { keys = slot, icon = SpellIcon(iconID), warn = warn } end
+    end
+    for _, c in ipairs(CustomFor("debuff")) do
+      self.slots[#self.slots + 1] = { custom = c, icon = CustomIcon(c) }
     end
   end
   function m:Update()
     if not self.slots then self:Rebuild() end
     local auras = UnitExists("target") and ScanAuras("target", "HARMFUL|PLAYER") or {}
-    local found, secretMode = {}, false
-    for _, a in ipairs(auras) do
-      if not readable(a.spellId) then secretMode = true break end
-      local k = SPELL_TO_KEY[a.spellId]
-      if k then found[k] = a end
-    end
+    local byKey, byId, byName = IndexAuras(auras)
 
-    if secretMode then
+    if not byKey then
       -- Fallback: IDs are secret -> just show all of your debuffs on the target.
       local n = math.min(#auras, 8)
       self:SetCount(n)
@@ -647,6 +768,7 @@ do
         pcall(ic.tex.SetTexture, ic.tex, a.icon)
         SetIconState(ic, true)
         SetAuraTimer(ic, "target", a)
+        ic.warn, ic.expires = nil, nil
       end
       return
     end
@@ -655,11 +777,19 @@ do
     for i, slot in ipairs(self.slots) do
       local ic = self.icons[i]
       local aura
-      for _, k in ipairs(slot.keys) do aura = aura or found[k] end
+      if slot.custom then
+        aura = byId[slot.custom.id] or (slot.custom.name and byName[slot.custom.name])
+      else
+        for _, k in ipairs(slot.keys) do aura = aura or byKey[k] end
+      end
+      ic.warn, ic.expires = slot.warn, nil
       if aura then
         ic.tex:SetTexture(aura.icon or slot.icon)
         SetIconState(ic, true)
         SetAuraTimer(ic, "target", aura)
+        if readable(aura.expirationTime) and aura.expirationTime and aura.expirationTime > 0 then
+          ic.expires = aura.expirationTime
+        end
       else
         ic.tex:SetTexture(slot.icon)
         SetIconState(ic, false)
@@ -667,26 +797,68 @@ do
       end
     end
   end
+  -- Bleed refresh warning: Rip/Rake icon blinks red during its last 2 seconds.
+  m.frame:SetScript("OnUpdate", function()
+    if not ns.db then return end
+    local now = GetTime()
+    for i = 1, m.count do
+      local ic = m.icons[i]
+      local left = ic.expires and (ic.expires - now)
+      if ns.db.bleedWarn and ic.warn and left and left > 0 and left < 2 then
+        ic:SetAlpha(0.35 + 0.65 * math.abs(math.sin(now * 8)))
+        ic:SetBackdropBorderColor(1, 0.15, 0.15, 1)
+        ic.blinking = true
+      elseif ic.blinking then
+        ic.blinking = nil
+        ic:SetAlpha(1)
+        ic:SetBackdropBorderColor(0, 0, 0, 1)
+      end
+    end
+  end)
 end
 
--- Cooldowns ---------------------------------------------------------
+-- Cooldowns (+ mana consumables) ------------------------------------
 do
   local m = IconRow("cooldowns")
   function m:Rebuild()
     self.spells = {}
     for _, k in ipairs(COOLDOWNS[ns.form] or {}) do
-      local id = KnownID(k)
-      if id then self.spells[#self.spells + 1] = id end
+      local id = not Hidden(k) and KnownID(k)
+      if id then self.spells[#self.spells + 1] = { spell = id } end
+    end
+    for _, c in ipairs(CustomFor("cd")) do
+      self.spells[#self.spells + 1] = { spell = c.name or c.id, icon = CustomIcon(c) }
     end
   end
   function m:Update()
     if not self.spells then self:Rebuild() end
-    self:SetCount(#self.spells)
-    for i, id in ipairs(self.spells) do
+    local entries = {}
+    for _, e in ipairs(self.spells) do entries[#entries + 1] = e end
+    if ns.db.consumables then
+      for _, group in ipairs(CONSUMABLES) do
+        for _, itemID in ipairs(group) do
+          local count = ItemCount(itemID)
+          if readable(count) and count and count > 0 then
+            entries[#entries + 1] = { item = itemID, count = count }
+            break
+          end
+        end
+      end
+    end
+    self:SetCount(#entries)
+    for i, e in ipairs(entries) do
       local ic = self.icons[i]
-      ic.tex:SetTexture(SpellIcon(id))
+      local start, dur
+      if e.item then
+        ic.tex:SetTexture(ItemIcon(e.item) or 134400)
+        ic.count:SetText(e.count > 1 and e.count or "")
+        start, dur = ItemCooldown(e.item)
+      else
+        ic.tex:SetTexture(e.icon or SpellIcon(e.spell) or 134400)
+        ic.count:SetText("")
+        start, dur = GetCooldown(e.spell)
+      end
       ic.cd:SetReverse(false)
-      local start, dur = GetCooldown(id)
       if readable(start, dur) then
         if start and dur and dur > 1.5 then
           ic.cd:SetCooldown(start, dur)
@@ -713,23 +885,26 @@ do
     for _, b in ipairs(BUFFS) do
       local okForm = not b.forms or b.forms[ns.form]
       local known = KnownID(b.key)
-      if okForm and (known or not b.needsKnown) then
+      if okForm and not Hidden(b.key) and (known or not b.needsKnown) then
         self.slots[#self.slots + 1] = { key = b.key, reminder = b.reminder, icon = SpellIcon(known or S[b.key][#S[b.key]]) }
       end
+    end
+    for _, c in ipairs(CustomFor("buff")) do
+      self.slots[#self.slots + 1] = { custom = c, icon = CustomIcon(c) }
     end
   end
   function m:Update()
     if not self.slots then self:Rebuild() end
-    local auras = ScanAuras("player", "HELPFUL")
-    local found = {}
-    for _, a in ipairs(auras) do
-      if not readable(a.spellId) then return end -- secret: keep the previous state
-      local k = SPELL_TO_KEY[a.spellId]
-      if k then found[k] = a end
-    end
+    local byKey, byId, byName = IndexAuras(ScanAuras("player", "HELPFUL"))
+    if not byKey then return end -- secret: keep the previous state
     self:SetCount(#self.slots)
     for i, slot in ipairs(self.slots) do
-      local ic, a = self.icons[i], found[slot.key]
+      local ic, a = self.icons[i], nil
+      if slot.custom then
+        a = byId[slot.custom.id] or (slot.custom.name and byName[slot.custom.name])
+      else
+        a = byKey[slot.key]
+      end
       if a then
         ic.tex:SetTexture(a.icon or slot.icon)
         SetIconState(ic, true)
@@ -812,11 +987,68 @@ local function HasClearcasting()
   return false
 end
 
-function ns:OnClearcastStart()
-  if self.db.ccSound then
-    local kit = SOUNDKIT and (SOUNDKIT.ALARM_CLOCK_WARNING_3 or SOUNDKIT.RAID_WARNING)
-    if not (kit and pcall(PlaySound, kit, "Master")) then pcall(PlaySound, 8959, "Master") end
+------------------------------------------------------------------------
+-- Sounds: built-in SoundKits, LibSharedMedia sounds (if another addon
+-- provides them) and a custom SoundKit ID / FileDataID (wago.tools/sounds).
+------------------------------------------------------------------------
+local SOUNDKIT_CHOICES = {
+  { "ALARM_CLOCK_WARNING_3", "Alarm clock" },
+  { "ALARM_CLOCK_WARNING_2", "Alarm clock (soft)" },
+  { "RAID_WARNING", "Raid warning" },
+  { "READY_CHECK", "Ready check" },
+  { "UI_RAID_BOSS_WHISPER_WARNING", "Boss whisper" },
+  { "TELL_MESSAGE", "Whisper" },
+  { "MAP_PING", "Map ping" },
+  { "IG_PLAYER_INVITE", "Invite" },
+  { "PVP_THROUGH_QUEUE", "Queue pop" },
+  { "AUCTION_WINDOW_OPEN", "Auction open" },
+  { "LEVELUP", "Level up" },
+  { "UI_BNET_TOAST", "Battle.net toast" },
+  { "IG_QUEST_LIST_COMPLETE", "Quest complete" },
+  { "IG_ABILITY_PAGE_TURN", "Page turn" },
+  { "GS_TITLE_OPTION_OK", "Click" },
+}
+
+-- Returns a list of { key, label }. Keys: "kit:NAME", "lsm:Name", "custom".
+function ns.GetSoundChoices()
+  local list = {}
+  for _, c in ipairs(SOUNDKIT_CHOICES) do
+    if SOUNDKIT and SOUNDKIT[c[1]] then list[#list + 1] = { "kit:" .. c[1], c[2] } end
   end
+  local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+  if LSM then
+    for _, name in ipairs(LSM:List("sound")) do
+      if name ~= "None" then list[#list + 1] = { "lsm:" .. name, name .. " (SharedMedia)" } end
+    end
+  end
+  list[#list + 1] = { "custom", "Custom ID..." }
+  return list
+end
+
+function ns:PlayAlertSound(key)
+  key = key or self.db.ccSoundKey
+  local ch = self.db.ccSoundChannel or "Master"
+  local kind, val = key:match("^(%a+):(.+)$")
+  if kind == "kit" and SOUNDKIT and SOUNDKIT[val] then
+    if pcall(PlaySound, SOUNDKIT[val], ch) then return end
+  elseif kind == "lsm" then
+    local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+    local path = LSM and LSM:Fetch("sound", val, true)
+    if path and pcall(PlaySoundFile, path, ch) then return end
+  elseif key == "custom" then
+    local id = tonumber(self.db.ccSoundCustom or "")
+    if id then
+      -- Try as SoundKit ID first, then as FileDataID.
+      local ok, played = pcall(PlaySound, id, ch)
+      if ok and played then return end
+      if pcall(PlaySoundFile, id, ch) then return end
+    end
+  end
+  pcall(PlaySound, 8959, ch) -- fallback: raid warning
+end
+
+function ns:OnClearcastStart()
+  if self.db.ccSound then self:PlayAlertSound() end
   if self.db.ccFlash then
     flash.anim:Stop()
     flash.anim:Play()
@@ -1017,6 +1249,37 @@ function ns:Refresh()
   self:UpdateAll()
 end
 
+-- Custom spells ------------------------------------------------------
+ns.KIND_LABELS = { cd = "Cooldown", buff = "Buff on me", debuff = "Debuff on target" }
+
+function ns:AddCustom(input, kind, forms)
+  input = strtrim(input or "")
+  if input == "" then return false, "Enter a spell name or spell ID." end
+  local id, name = tonumber(input), nil
+  if id then
+    name = ns.SpellName(id)
+  elseif C_Spell and C_Spell.GetSpellInfo then
+    local info = C_Spell.GetSpellInfo(input)
+    if type(info) == "table" then id, name = info.spellID, info.name end
+  elseif GetSpellInfo then
+    local n, _, _, _, _, _, sid = GetSpellInfo(input)
+    id, name = sid, n
+  end
+  if not id or not name then
+    return false, "Spell not found: " .. input .. " (names only work for spells in your spellbook, use the spell ID otherwise)"
+  end
+  if not (forms.cat or forms.bear or forms.caster) then return false, "Pick at least one form." end
+  table.insert(self.db.custom, { id = id, name = name, kind = kind,
+    forms = { cat = forms.cat, bear = forms.bear, caster = forms.caster } })
+  self:Refresh()
+  return true, "Added " .. name .. " (" .. id .. ")"
+end
+
+function ns:RemoveCustom(index)
+  table.remove(self.db.custom, index)
+  self:Refresh()
+end
+
 function ns:SetLocked(locked)
   self.db.locked = locked
   self:Layout()
@@ -1096,6 +1359,8 @@ ev:SetScript("OnEvent", function(_, event, arg1)
     TryRegister("SPELL_UPDATE_COOLDOWN")
     TryRegister("PLAYER_REGEN_ENABLED")
     TryRegister("PLAYER_REGEN_DISABLED")
+    TryRegister("BAG_UPDATE_COOLDOWN")
+    TryRegister("BAG_UPDATE_DELAYED")
     TryRegister("UNIT_AURA", "player", "target")
     TryRegister("UNIT_POWER_FREQUENT", "player")
     TryRegister("UNIT_DISPLAYPOWER", "player")
@@ -1137,7 +1402,7 @@ ev:SetScript("OnEvent", function(_, event, arg1)
   elseif event == "PLAYER_TARGET_CHANGED" then
     ns.modules.debuffs:Update()
     ns.modules.combo:Update()
-  elseif event == "SPELL_UPDATE_COOLDOWN" then
+  elseif event == "SPELL_UPDATE_COOLDOWN" or event == "BAG_UPDATE_COOLDOWN" or event == "BAG_UPDATE_DELAYED" then
     ns.modules.cooldowns:Update()
   elseif event == "UNIT_POWER_FREQUENT" then
     ns.modules.power:OnPower()
@@ -1168,10 +1433,12 @@ SlashCmdList.COMPACTDRUIDBAR = function(msg)
     ns:TestClearcast()
   elseif cmd == "debug" then
     ns:Debug()
+  elseif cmd == "spells" then
+    if ns.OpenOptions then ns:OpenOptions("spells") end
   elseif cmd == "" or cmd == "config" or cmd == "options" then
     if ns.OpenOptions then ns:OpenOptions() end
   else
-    print("|cff4fe8ffCompact Druid Bar|r: /cdb (options), /cdb unlock, /cdb lock, /cdb scale 1.2, /cdb reset, /cdb test, /cdbdebug")
+    print("|cff4fe8ffCompact Druid Bar|r: /cdb (options), /cdb unlock, /cdb lock, /cdb scale 1.2, /cdb spells, /cdb reset, /cdb test, /cdbdebug")
   end
 end
 
