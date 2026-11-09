@@ -121,24 +121,40 @@ local function BuildPanel()
   panel:Hide()
 end
 
+-- What happened at the last trainer visit, for /cdbdebug.
+ns.trainerDebug = { events = {} }
 local function Update()
-  if not (ns.db and ns.db.trainerHelper) then if panel then panel:Hide() end return end
+  local dbg = ns.trainerDebug
+  dbg.ran = (dbg.ran or 0) + 1
+  dbg.api = (GetNumTrainerServices and "yes" or "no") .. "/" .. (GetTrainerServiceInfo and "yes" or "no")
+  dbg.tradeskill = IsTradeskillTrainer and tostring(SafeCall(IsTradeskillTrainer)) or "n/a"
+  dbg.n = SafeCall(GetNumTrainerServices)
+  local a, b, c = SafeCall(GetTrainerServiceInfo, 1)
+  dbg.first = tostring(a) .. " | " .. tostring(b) .. " | " .. tostring(c)
+  dbg.frame = ClassTrainerFrame and (ClassTrainerFrame:IsShown() and "shown" or "hidden") or "missing"
+  if not (ns.db and ns.db.trainerHelper) then dbg.stop = "option off"; if panel then panel:Hide() end return end
   local _, class = UnitClass("player")
   if class ~= "DRUID" then return end
-  if IsTradeskillTrainer and IsTradeskillTrainer() then if panel then panel:Hide() end return end
+  if IsTradeskillTrainer and SafeCall(IsTradeskillTrainer) then dbg.stop = "profession trainer"; if panel then panel:Hide() end return end
   local list = ReadServices()
   Remember(list)
   local groups, totals = { useful = {}, optional = {}, wait = {}, unknown = {} }, { useful = 0, optional = 0, wait = 0, unknown = 0 }
   local count = 0
+  local myLevel = UnitLevel("player") or 0
   for _, s in ipairs(list) do
-    if s.state == "available" then
+    -- Some clients use other state names: anything learnable at your level counts too.
+    local learnable = s.state == "available"
+      or (s.state ~= "used" and s.state ~= "unavailable" and s.level <= myLevel)
+    if learnable then
       local g = groups[s.verdict] or groups.unknown
       g[#g + 1] = s
       totals[s.verdict] = (totals[s.verdict] or 0) + s.cost
       count = count + 1
     end
   end
-  if count == 0 then if panel then panel:Hide() end return end
+  dbg.available = count
+  if count == 0 then dbg.stop = "nothing learnable found"; if panel then panel:Hide() end return end
+  dbg.stop = "panel shown"
   if not panel then BuildPanel() end
 
   local spec = ns.CurrentSpec and ns:CurrentSpec()
@@ -204,6 +220,8 @@ for _, e in ipairs({ "TRAINER_SHOW", "TRAINER_UPDATE", "TRAINER_CLOSED", "PLAYER
   pcall(ev.RegisterEvent, ev, e)
 end
 ev:SetScript("OnEvent", function(_, event, arg1)
+  local ev = ns.trainerDebug.events
+  ev[event] = (ev[event] or 0) + 1
   if event == "TRAINER_CLOSED" then
     if panel then panel:Hide() end
   elseif event == "PLAYER_LEVEL_UP" then

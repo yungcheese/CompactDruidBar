@@ -2488,6 +2488,15 @@ function ns:Debug()
         math.floor(pw or 0), math.floor(ph or 0), ns.panel:GetEffectiveAlpha() or 0))
     end)
     print(("  Energy tick known: %s"):format(tostring(ns.modules.power.lastTick > 0)))
+    try("Trainer", function()
+      local d = ns.trainerDebug or {}
+      local evs = {}
+      for e, n in pairs(d.events or {}) do evs[#evs + 1] = e .. "=" .. n end
+      print(("  Trainer: events %s, ran %s, API %s, services %s, profession %s, frame %s"):format(
+        #evs > 0 and table.concat(evs, " ") or "none", tostring(d.ran), tostring(d.api), tostring(d.n),
+        tostring(d.tradeskill), tostring(d.frame)))
+      print(("  Trainer first: %s, learnable: %s, result: %s"):format(tostring(d.first), tostring(d.available), tostring(d.stop)))
+    end)
     try("Energy rhythm", function()
       local pm = ns.modules.power
       local med, n = pm:EnergyRhythm()
