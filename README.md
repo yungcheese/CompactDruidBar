@@ -23,6 +23,9 @@ A compact, fully scalable druid bar for **WoW Forever** (client 1.60.1, interfac
 - Dimmed out of combat
 - Four styles: Classic gold frame (default), Classic polished, Flat and Soft, with combo point gems, classic icon borders, background panel and bar sparks
 
+## Download
+[CurseForge](https://www.curseforge.com/projects/1791757) or the [GitHub releases](https://github.com/yungcheese/CompactDruidBar/releases).
+
 ## Installation
 Copy the `CompactDruidBar` folder to:
 `World of Warcraft\_forever_\Interface\AddOns\`
