@@ -4,6 +4,7 @@
 - **Profiles**: save different layouts, choose one per character, switch automatically in raids, parties or by talent spec, and share layouts with an export/import string
 - **Trainer helper**: at the class trainer a panel sorts what you can learn into Useful, Optional and Can wait for your spec, with the cost of each group (nothing is bought for you)
 - **Level-up note**: tells you what's new at your trainer when you level up
+- **Food buff reminder**: an icon in the buff row that turns red without a food buff and blinks in its last minute, plus a chat note when it runs out. "Well Fed" is recognized automatically; any other food buff (like the new WoW Forever foods) can be picked in the options
 - **Caster view**: in caster form with a friendly target, the target row shows your Rejuvenation and Regrowth timers
 - Powershift marks now count back from your current mana (each segment is exactly one shift) and use the measured mana cost of your shifts
 - Icons are evenly spaced; optional extra gap between groups

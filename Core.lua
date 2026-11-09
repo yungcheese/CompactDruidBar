@@ -44,6 +44,7 @@ local DEFAULTS = {
   ccSoundKey = "fid:569649", ccSoundChannel = "Master",
   bleedWarn = true, consumables = true, cpGlow = true, gcdSpark = true,
   trainerHelper = true, levelUpReminder = true, casterView = true,
+  foodBuff = true, foodWarn = true,
   style = "gold", gems = true, iconBorder = true, panel = true, barSpark = true,
   iconSizes = { debuffs = 22, cooldowns = 22, buffs = 22 }, -- per icon row
   point = { "CENTER", "UIParent", "CENTER", 0, -160 },
@@ -1331,6 +1332,54 @@ do
   end
 end
 
+-- Food buff ---------------------------------------------------------
+-- Every food has its own buff ID and icon, and WoW Forever added many new
+-- foods. So we match by name ("Well Fed", read from the game in the client's
+-- language) and also accept buffs you picked yourself in the options.
+local WELL_FED_IDS = { 19705, 19706, 19708, 19709, 19710, 19711, 24799, 25694, 25941 }
+local foodNames
+local function FoodNames()
+  if not foodNames then
+    foodNames = { ["Well Fed"] = true }
+    for _, id in ipairs(WELL_FED_IDS) do
+      local n = ns.SpellName(id)
+      if n and readable(n) then foodNames[n] = true end
+    end
+  end
+  return foodNames
+end
+local function IsFoodAura(a)
+  local g = ns.global and ns.global.food
+  if g and readable(a.spellId) and g.ids[a.spellId] then return true end
+  if not readable(a.name) or not a.name then return false end
+  if g and g.names[a.name] then return true end
+  return FoodNames()[a.name] or false
+end
+-- Your current buffs (only readable out of combat), for the picker in the options.
+function ns.CurrentBuffs()
+  local list = {}
+  local auras, err = ScanAuras("player", "HELPFUL")
+  if err then return list end
+  for _, a in ipairs(auras) do
+    if readable(a.spellId, a.name) and a.name then
+      list[#list + 1] = { id = a.spellId, name = a.name, icon = a.icon }
+    end
+  end
+  return list
+end
+function ns:AddFoodBuff(id, name)
+  local g = self.global.food
+  if id then g.ids[id] = name or true end
+  if name then g.names[name] = true end
+  self.modules.buffs:Rebuild()
+  self.modules.buffs:Update()
+end
+function ns:ClearFoodBuffs()
+  wipe(self.global.food.ids)
+  wipe(self.global.food.names)
+  self.modules.buffs:Update()
+end
+
 -- Buffs -------------------------------------------------------------
 do
   local m = IconRow("buffs")
@@ -1345,6 +1394,11 @@ do
     end
     for _, c in ipairs(CustomFor("buff")) do
       self.slots[#self.slots + 1] = { custom = c, icon = CustomIcon(c) }
+    end
+    if ns.db.foodBuff then
+      local g = ns.global and ns.global.food
+      self.slots[#self.slots + 1] = { food = true, reminder = true,
+        icon = (g and g.icon) or SpellIcon(19705) or 133943 }
     end
   end
   function m:Update()
@@ -1368,15 +1422,33 @@ do
     self:SetCount(#self.slots)
     for i, slot in ipairs(self.slots) do
       local ic, a = self.icons[i], nil
-      if slot.custom then
+      if slot.food then
+        for _, x in ipairs(auras) do if not a and IsFoodAura(x) then a = x end end
+      elseif slot.custom then
         a = byId[slot.custom.id] or (slot.custom.name and byName[slot.custom.name])
       else
         a = byKey[slot.key]
       end
+      ic.food = slot.food
       if a then
         ic.tex:SetTexture(a.icon or slot.icon)
         SetIconState(ic, true)
         SetAuraTimer(ic, "player", a)
+        if slot.food then
+          -- Remember the end time: the warning and the "ran out" state keep working in combat.
+          if ns.global and ns.global.food and a.icon then ns.global.food.icon = a.icon end
+          if readable(a.expirationTime) and a.expirationTime and a.expirationTime > 0 then
+            ic.expires, ic.fromCast = a.expirationTime, true
+          end
+          m.hadFood = true
+        end
+      elseif slot.food and m.hadFood and not UnitAffectingCombat("player") then
+        m.hadFood = nil
+        print("|cff4fe8ffCompact Druid Bar|r: your food buff ran out. Eat something to keep the bonus XP.")
+        ic.tex:SetTexture(slot.icon)
+        SetIconState(ic, false, slot.reminder)
+        ic.cd:Clear()
+        ic.expires, ic.fromCast = nil, nil
       else
         ic.tex:SetTexture(slot.icon)
         SetIconState(ic, false, slot.reminder)
@@ -1413,6 +1485,17 @@ do
         ic.fromCast, ic.expires = nil, nil
         SetIconState(ic, false, slot and slot.reminder)
         ic.cd:Clear()
+      end
+      -- Food buff: blink orange during its last minute.
+      local left = ic.food and ic.expires and (ic.expires - now)
+      if ns.db.foodWarn and left and left > 0 and left < 60 then
+        ic:SetAlpha(0.4 + 0.6 * math.abs(math.sin(now * 4)))
+        ic:SetBackdropBorderColor(1, 0.55, 0.1, 1)
+        ic.blinking = true
+      elseif ic.blinking then
+        ic.blinking = nil
+        ic:SetAlpha(1)
+        if not (slot and slot.reminder and not ic.expires) then ic:SetBackdropBorderColor(IconBorderColor()) end
       end
     end
   end)

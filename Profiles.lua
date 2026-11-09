@@ -56,6 +56,9 @@ function ns:InitProfiles()
   sv.global.minimap = sv.global.minimap or {}
   if sv.global.minimap.hide == nil then sv.global.minimap.hide = true end
   sv.global.minimap.minimapPos = sv.global.minimap.minimapPos or 220
+  sv.global.food = sv.global.food or {}
+  sv.global.food.ids = sv.global.food.ids or {}
+  sv.global.food.names = sv.global.food.names or {}
   sv.profiles[DEFAULT_PROFILE] = sv.profiles[DEFAULT_PROFILE] or {}
   CompactDruidBarDB = sv
 

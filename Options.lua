@@ -397,7 +397,7 @@ end
 -- Page: Alerts (clearcasting and warnings)
 ------------------------------------------------------------------------
 local function BuildAlerts()
-  local panel, c = MakePage("Alerts", 420)
+  local panel, c = MakePage("Alerts", 560)
   PageTitle(c, "Alerts", "How Clearcasting procs and refresh warnings get your attention.")
 
   local y = Section(c, L, -80, COLW, "Clearcasting")
@@ -444,6 +444,37 @@ local function BuildAlerts()
   local volHint = Text(c, R, y - 30, "Volume follows this channel's slider in the game's sound settings. Tip: pick Dialog or Ambience and raise that slider to make the alert louder than other effects.")
   volHint:SetWidth(COLW)
   volHint:SetTextColor(0.6, 0.6, 0.6)
+
+  y = Section(c, R, y - 90, COLW, "Food buff")
+  Checkbox(c, R, y, "Food buff icon (red when missing)", Flag("foodBuff")); y = y - 24
+  Checkbox(c, R, y, "Blink in its last minute", Flag("foodWarn")); y = y - 30
+  local foodHint = Text(c, R, y, "\"Well Fed\" is recognized automatically. Food with another buff name: eat it, then pick its buff here.")
+  foodHint:SetWidth(COLW)
+  foodHint:SetTextColor(0.6, 0.6, 0.6)
+  y = y - 34
+  local picked
+  Dropdown(c, R, y, 200, function()
+      local list = {}
+      for _, b in ipairs(ns.CurrentBuffs()) do list[#list + 1] = { b.id, b.name } end
+      if #list == 0 then list[1] = { 0, "(no readable buffs right now)" } end
+      return list
+    end,
+    function() return picked end,
+    function(v)
+      for _, b in ipairs(ns.CurrentBuffs()) do
+        if b.id == v then ns:AddFoodBuff(b.id, b.name); picked = v end
+      end
+      ns.RefreshOptions()
+    end)
+  Button(c, R + 206, y, 84, "Clear", function() ns:ClearFoodBuffs(); picked = nil; ns.RefreshOptions() end)
+  local learned = Text(c, R, y - 28, "")
+  learned:SetWidth(COLW)
+  OnRefresh(function()
+    local names = {}
+    for n in pairs(ns.global.food.names) do names[#names + 1] = n end
+    table.sort(names)
+    learned:SetText(#names > 0 and ("Also counted as food: |cffffd100" .. table.concat(names, ", ") .. "|r") or "")
+  end)
   return panel
 end
 
