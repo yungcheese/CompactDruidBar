@@ -125,12 +125,12 @@ local COOLDOWNS = {
   bear   = { "charge", "bash", "enrage", "frenzied", "ffFeral", "barkskin" },
   caster = { "grasp", "barkskin", "innervate", "rebirth", "swiftmend", "nswift", "hurricane" },
 }
--- reminder = red/grey when missing; otherwise only highlighted while active
+-- reminder = red/grey when missing; otherwise only highlighted while active.
+-- (Nature's Grasp isn't listed: its cooldown icon shows the buff while it's up.)
 local BUFFS = {
   { key = "motw", reminder = true },
   { key = "thorns", reminder = true },
   { key = "tigers", needsKnown = true, forms = { cat = true } },
-  { key = "grasp", needsKnown = true },
 }
 
 -- Spell APIs can throw for IDs that don't exist on this client (e.g. Classic IDs
@@ -1122,6 +1122,7 @@ function ns:TrackCast(spellID)
   if key and BUFF_DURATION[key] then
     self.buffCasts[key] = { start = GetTime(), dur = BUFF_DURATION[key] }
     self.modules.buffs:Update()
+    self.modules.cooldowns:Update()
     return
   end
   local dur = key and (DURATION_OVERRIDE[spellID] or DEBUFF_DURATION[key])
@@ -1279,7 +1280,7 @@ do
     self.spells = {}
     for _, k in ipairs(COOLDOWNS[ns.form] or {}) do
       local id = not Hidden(k) and KnownID(k)
-      if id then self.spells[#self.spells + 1] = { spell = id } end
+      if id then self.spells[#self.spells + 1] = { spell = id, key = k } end
     end
     for _, c in ipairs(CustomFor("cd")) do
       self.spells[#self.spells + 1] = { spell = c.name or c.id, icon = CustomIcon(c) }
@@ -1314,7 +1315,19 @@ do
         start, dur = GetCooldown(e.spell)
       end
       ic.cd:SetReverse(false)
-      if readable(start, dur) then
+      -- A cooldown that is also a buff on you (Nature's Grasp): while the buff
+      -- is up, show its remaining time with a green border instead of the cooldown.
+      local b = e.key and ns.buffCasts[e.key]
+      local now = GetTime()
+      if b and b.start + b.dur > now then
+        SetIconState(ic, true)
+        ic:SetBackdropBorderColor(0.3, 1, 0.3, 1)
+        ic.cd:SetReverse(true)
+        ic.cd:SetCooldown(b.start, b.dur)
+        if C_Timer and C_Timer.After then
+          C_Timer.After(b.start + b.dur - now + 0.05, function() m:Update() end)
+        end
+      elseif readable(start, dur) then
         if start and dur and dur > 1.5 then
           ic.cd:SetCooldown(start, dur)
           SetIconState(ic, false)
@@ -1419,6 +1432,7 @@ do
         ns.buffCasts[k] = { start = a.expirationTime - a.duration, dur = a.duration }
       end
     end
+    ns.modules.cooldowns:Update() -- Nature's Grasp shows its buff on the cooldown icon
     self:SetCount(#self.slots)
     for i, slot in ipairs(self.slots) do
       local ic, a = self.icons[i], nil
