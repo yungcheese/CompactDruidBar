@@ -8,7 +8,7 @@ A compact, fully scalable druid bar for **WoW Forever** (client 1.60.1, interfac
 - **Health** and **energy / rage / mana**: the bar switches with your form
 - **Combo points** (Cat Form only)
 - **Mana while shapeshifted** with a **powershift counter** (`x3` = shifts you can still afford) and a mark on the bar for each shift's cost
-- **Energy tick timer**: a white spark runs across the energy bar and reaches the end on the next tick
+- **Energy tick timer**: a white spark runs across the energy bar and reaches the end on the next tick (hidden automatically when energy regenerates continuously)
 - **Clearcasting alerts**: the energy bar lights up, a large pulsing icon appears, plus a sound and a border flash
 - **Target debuffs** (Rip, Rake, Pounce, Faerie Fire / Demoralizing Roar / Moonfire, Insect Swarm), **cooldowns** and **buffs** (Mark of the Wild, Thorns, Tiger's Fury, Nature's Grasp), centered on one line
 - **Rip/Rake refresh warning**: the icon blinks red during its last 2 seconds
@@ -17,6 +17,9 @@ A compact, fully scalable druid bar for **WoW Forever** (client 1.60.1, interfac
 - **Choose your clearcasting sound**: the original Blizzard Clearcasting sound (default), 10 alert sounds included with the addon, SharedMedia sounds from other addons, or any SoundKit/FileDataID
 - **Add your own spells** (cooldowns, buffs, debuffs per form) and hide built-in ones on the *Spells* options page
 - Only shows spells you know, so it grows with you while leveling
+- **Profiles** per character, switching automatically in raids, parties or by talent spec, with import/export strings to share layouts
+- **Trainer helper**: shows what's worth buying for your spec and what can wait, with costs, plus a note on level-up
+- **Caster view**: your Rejuvenation and Regrowth timers on a friendly target
 - Dimmed out of combat
 - Four styles: Classic gold frame (default), Classic polished, Flat and Soft, with combo point gems, classic icon borders, background panel and bar sparks
 

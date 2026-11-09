@@ -383,7 +383,13 @@ local function BuildLook()
   Checkbox(c, R, y, "Glow at 5 combo points", Flag("cpGlow")); y = y - 24
 
   y = Section(c, R, y - 14, COLW, "Extra icons")
-  Checkbox(c, R, y, "Mana potion + rune cooldowns", Flag("consumables"))
+  Checkbox(c, R, y, "Mana potion + rune cooldowns", Flag("consumables")); y = y - 24
+
+  y = Section(c, L, -270, COLW, "Caster form")
+  Checkbox(c, L, y, "Show your HoTs on a friendly target", Flag("casterView")); y = y - 22
+  local cvHint = Text(c, L + 4, y - 2, "Rejuvenation and Regrowth timers replace the debuff row in caster form when your target is friendly (or you have none).")
+  cvHint:SetWidth(COLW - 4)
+  cvHint:SetTextColor(0.6, 0.6, 0.6)
   return panel
 end
 

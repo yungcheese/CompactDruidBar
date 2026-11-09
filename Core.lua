@@ -43,7 +43,7 @@ local DEFAULTS = {
   ccGlow = true, ccSound = true, ccFlash = true,
   ccSoundKey = "fid:569649", ccSoundChannel = "Master",
   bleedWarn = true, consumables = true, cpGlow = true, gcdSpark = true,
-  trainerHelper = true, levelUpReminder = true,
+  trainerHelper = true, levelUpReminder = true, casterView = true,
   style = "gold", gems = true, iconBorder = true, panel = true, barSpark = true,
   iconSizes = { debuffs = 22, cooldowns = 22, buffs = 22 }, -- per icon row
   point = { "CENTER", "UIParent", "CENTER", 0, -160 },
@@ -74,6 +74,8 @@ ns.CopyDefaults = CopyDefaults
 -- Spell data (Classic spell IDs, all ranks)
 ------------------------------------------------------------------------
 local S = {
+  rejuv     = { 774, 1058, 1430, 2090, 2091, 3627, 8910, 9839, 9840, 9841, 25299 },
+  regrowth  = { 8936, 8938, 8939, 8940, 8941, 9750, 9856, 9857, 9858 },
   rip       = { 1079, 9492, 9493, 9752, 9894, 9896 },
   rake      = { 1822, 1823, 1824, 9904 },
   pounce    = { 9007, 9824, 9826 },          -- Pounce Bleed debuff
@@ -262,6 +264,7 @@ ns.BUILTIN = {
   { cat = "Debuffs", keys = { "rip", "rake", "pounce", "ffFeral", "ff", "demo", "moonfire", "swarm" } },
   { cat = "Cooldowns", keys = { "dash", "grasp", "barkskin", "innervate", "rebirth", "bash", "charge", "enrage", "frenzied", "swiftmend", "nswift", "hurricane" } },
   { cat = "Buffs", keys = { "motw", "thorns", "tigers" } },
+  { cat = "Heal over time (caster view)", keys = { "rejuv", "regrowth" } },
 }
 function ns.SpellName(id)
   if C_Spell and C_Spell.GetSpellName then return (SafeCall(C_Spell.GetSpellName, id)) end
@@ -1087,7 +1090,18 @@ local BLEEDS = { rip = true, rake = true }
 
 -- Cast tracking: Forever blocks target auras in combat, so we time our own
 -- debuffs from our casts (like the old Classic WeakAuras did).
-local DEBUFF_DURATION = { rip = 12, rake = 9, pounce = 18, ffFeral = 40, ff = 40, demo = 30, moonfire = 12, swarm = 12 }
+local DEBUFF_DURATION = { rip = 12, rake = 9, pounce = 18, ffFeral = 40, ff = 40, demo = 30, moonfire = 12, swarm = 12,
+  rejuv = 12, regrowth = 21 }
+-- Caster view: in caster form with a friendly target (or none), the target row
+-- shows your heals over time on that target instead of your debuffs.
+local HOT_SLOTS = { { "rejuv" }, { "regrowth" } }
+local function HotMode()
+  if not (ns.db and ns.db.casterView and ns.form == "caster") then return false end
+  if not UnitExists("target") then return true end
+  local ok, hostile = pcall(UnitCanAttack, "player", "target")
+  return ok and readable(hostile) and not hostile
+end
+ns.HotMode = HotMode
 local DURATION_OVERRIDE = { [8921] = 9 }                       -- Moonfire rank 1
 local CAST_KEY = { [9005] = "pounce", [9823] = "pounce", [9827] = "pounce" } -- Pounce casts -> bleed
 ns.casts = {}                                                  -- key -> { start, dur, guid }
@@ -1120,7 +1134,9 @@ do
   local m = IconRow("debuffs")
   function m:Rebuild()
     self.slots = {}
-    for _, slot in ipairs(DEBUFF_SLOTS[ns.form] or {}) do
+    self.hots = HotMode()
+    local slots = self.hots and HOT_SLOTS or DEBUFF_SLOTS[ns.form] or {}
+    for _, slot in ipairs(slots) do
       local iconID, warn
       for _, k in ipairs(slot) do
         local id = not Hidden(k) and KnownID(k)
@@ -1129,17 +1145,23 @@ do
       end
       if iconID then self.slots[#self.slots + 1] = { keys = slot, icon = SpellIcon(iconID), warn = warn } end
     end
-    for _, c in ipairs(CustomFor("debuff")) do
-      self.slots[#self.slots + 1] = { custom = c, icon = CustomIcon(c) }
+    if not self.hots then
+      for _, c in ipairs(CustomFor("debuff")) do
+        self.slots[#self.slots + 1] = { custom = c, icon = CustomIcon(c) }
+      end
     end
   end
   function m:Update()
-    if not self.slots then self:Rebuild() end
+    if not self.slots or self.hots ~= HotMode() then self:Rebuild() end
     local auras, err = {}, nil
-    if UnitExists("target") then auras, err = ScanAuras("target", "HARMFUL|PLAYER") end
+    if self.hots then
+      auras, err = ScanAuras(UnitExists("target") and "target" or "player", "HELPFUL|PLAYER")
+    elseif UnitExists("target") then
+      auras, err = ScanAuras("target", "HARMFUL|PLAYER")
+    end
     self.targetChanged = nil
     -- In combat Forever blocks target auras: show our own tracked casts instead.
-    if UnitExists("target") and AurasUnknown(auras, err) then
+    if (UnitExists("target") or self.hots) and AurasUnknown(auras, err) then
       self:ShowFromCasts()
       return
     end
@@ -1155,6 +1177,7 @@ do
       end
     end
 
+    if not byKey and self.hots then byKey, byId, byName = {}, {}, {} end
     if not byKey then
       -- Fallback: IDs are secret -> just show all of your debuffs on the target.
       local n = math.min(#auras, 8)

@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased (v1.1.0)
+- **Profiles**: save different layouts, choose one per character, switch automatically in raids, parties or by talent spec, and share layouts with an export/import string
+- **Trainer helper**: at the class trainer a panel sorts what you can learn into Useful, Optional and Can wait for your spec, with the cost of each group (nothing is bought for you)
+- **Level-up note**: tells you what's new at your trainer when you level up
+- **Caster view**: in caster form with a friendly target, the target row shows your Rejuvenation and Regrowth timers
+- Powershift marks now count back from your current mana (each segment is exactly one shift) and use the measured mana cost of your shifts
+- Icons are evenly spaced; optional extra gap between groups
+- Energy tick timer hides itself on clients where energy regenerates continuously (like WoW Forever)
+- Spell and form names are read from the game, so the addon works on non-English clients
+- Less CPU: bars update on game events instead of 20 times per second, spell lookups are cached
+
 ## v1.0.3
 - The original Blizzard Clearcasting proc sound is back (also the druid alert variant) and is now the default sound
 - Icons of the merged rows are spread evenly over the lines (e.g. 8 icons become 4 + 4 instead of three lines)
