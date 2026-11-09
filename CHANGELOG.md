@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased (v1.1.0)
+## v1.1.0
 - **Profiles**: save different layouts, choose one per character, switch automatically in raids, parties or by talent spec, and share layouts with an export/import string
-- **Trainer helper**: at the class trainer a panel sorts what you can learn into Useful, Optional and Can wait for your spec, with the cost of each group (nothing is bought for you)
+- **Trainer helper**: at the class trainer a panel tells you what to buy for your role, what is optional and what you can skip (with the gold it saves). Utility spells where rank 1 is enough (Revive, Rebirth, Hibernate, Soothe Animal, Entangling Roots) go to "skip" from rank 2. Nothing is bought for you; set your role in the options or let it follow your talents
 - **Level-up note**: tells you what's new at your trainer when you level up
 - **Food buff reminder**: an icon in the buff row that turns red without a food buff and blinks in its last minute, plus a chat note when it runs out. "Well Fed" is recognized automatically; any other food buff (like the new WoW Forever foods) can be picked in the options
 - **Caster view**: in caster form with a friendly target, the target row shows your Rejuvenation and Regrowth timers
