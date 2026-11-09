@@ -39,12 +39,10 @@ local DEFAULTS = {
   locked = true,
   scale = 1, width = 170, barHeight = 14, smallBarHeight = 8, iconSize = 22,
   fontSize = 10, spacing = 2, oocAlpha = 0.4, iconLines = 0, groupGap = 0,
-  shiftCost = {}, -- measured mana cost of a shift per form ("cat", "bear")
   showText = true, energyTick = true, manaTicks = true, mergeIcons = true,
   ccGlow = true, ccSound = true, ccFlash = true,
   ccSoundKey = "fid:569649", ccSoundChannel = "Master",
   bleedWarn = true, consumables = true, cpGlow = true, gcdSpark = true,
-  minimap = { hide = true, minimapPos = 220 }, -- same keys LibDBIcon uses
   style = "gold", gems = true, iconBorder = true, panel = true, barSpark = true,
   iconSizes = { debuffs = 22, cooldowns = 22, buffs = 22 }, -- per icon row
   point = { "CENTER", "UIParent", "CENTER", 0, -160 },
@@ -68,6 +66,7 @@ local function CopyDefaults(src, dst)
   end
   return dst
 end
+ns.CopyDefaults = CopyDefaults
 ns.CopyDefaults = CopyDefaults
 
 ------------------------------------------------------------------------
@@ -812,7 +811,7 @@ do
   -- The real mana drop of your last out-of-combat shift into this form wins,
   -- because the reported cost doesn't always match what is actually spent.
   local function ShiftCost()
-    local measured = ns.db and ns.db.shiftCost and ns.db.shiftCost[FormKey()]
+    local measured = ns.charData and ns.charData.shiftCost[FormKey()]
     if type(measured) == "number" and measured > 0 then return measured end
     return ApiShiftCost()
   end
@@ -835,7 +834,7 @@ do
   function m:TryMeasure()
     if not (self.castT and self.dropT) then return end
     if math.abs(self.castT - self.dropT) > 0.5 then return end
-    if self.drop and self.drop > 0 then ns.db.shiftCost[self.castKey] = self.drop end
+    if self.drop and self.drop > 0 and ns.charData then ns.charData.shiftCost[self.castKey] = self.drop end
     self.castT, self.dropT = nil, nil
   end
   function m:OnCast(spellID)
@@ -1968,10 +1967,9 @@ function ns:ResetPositions()
   self:Layout()
 end
 
+-- Resets the active profile to the defaults.
 function ns:ResetAll()
-  wipe(CompactDruidBarDB)
-  self.db = CopyDefaults(DEFAULTS, CompactDruidBarDB)
-  self:Refresh()
+  self:ResetProfile()
 end
 
 ------------------------------------------------------------------------
@@ -2030,18 +2028,8 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
       print("|cff4fe8ffCompact Druid Bar|r: not a druid, addon disabled.")
       return
     end
-    CompactDruidBarDB = CompactDruidBarDB or {}
-    -- Upgrade: start the per-row icon sizes from the existing global size.
-    if CompactDruidBarDB.iconSize and not CompactDruidBarDB.iconSizes then
-      local s = CompactDruidBarDB.iconSize
-      CompactDruidBarDB.iconSizes = { debuffs = s, cooldowns = s, buffs = s }
-    end
-    ns.db = CopyDefaults(DEFAULTS, CompactDruidBarDB)
-    -- Upgrade: the old game-sound choices ("kit:...") are gone, use our own sound.
-    if type(ns.db.ccSoundKey) == "string" and ns.db.ccSoundKey:sub(1, 4) == "kit:"
-      and ns.db.ccSoundKey ~= "kit:ALARM_CLOCK_WARNING_3" then
-      ns.db.ccSoundKey = ns.DEFAULT_SOUND
-    end
+    -- Settings live in profiles (Profiles.lua); this also upgrades older saved data.
+    ns:InitProfiles()
     for _, key in ipairs(ns.MODULE_ORDER) do CreateMover(ns.modules[key]) end
     if ns.BuildOptions then ns:BuildOptions() end
 
@@ -2199,7 +2187,7 @@ local function CreateOwnMinimapButton()
   border:SetPoint("TOPLEFT")
 
   local function UpdatePos()
-    local a = math.rad(ns.db.minimap.minimapPos or 220)
+    local a = math.rad(ns.global.minimap.minimapPos or 220)
     local r = Minimap:GetWidth() / 2 + 5
     b:ClearAllPoints()
     b:SetPoint("CENTER", Minimap, "CENTER", math.cos(a) * r, math.sin(a) * r)
@@ -2214,7 +2202,7 @@ local function CreateOwnMinimapButton()
       local cx, cy = GetCursorPosition()
       cx, cy = cx / s, cy / s
       local atan2 = math.atan2 or function(y, x) return math.atan(y, x) end
-      ns.db.minimap.minimapPos = math.deg(atan2(cy - my, cx - mx)) % 360
+      ns.global.minimap.minimapPos = math.deg(atan2(cy - my, cx - mx)) % 360
       UpdatePos()
     end)
   end)
@@ -2241,7 +2229,7 @@ function ns:SetupMinimap()
       OnClick = function(_, button) ns:OnLauncherClick(button) end,
       OnTooltipShow = function(tt) ns:LauncherTooltip(tt) end,
     })
-    DBI:Register("CompactDruidBar", obj, self.db.minimap)
+    DBI:Register("CompactDruidBar", obj, self.global.minimap)
     self.dbi = DBI
   else
     self.minimapButton = CreateOwnMinimapButton()
@@ -2251,7 +2239,7 @@ end
 
 function ns:UpdateMinimap()
   if not self.minimapReady then return end
-  local show = not self.db.minimap.hide
+  local show = not self.global.minimap.hide
   if self.dbi then
     if show then self.dbi:Show("CompactDruidBar") else self.dbi:Hide("CompactDruidBar") end
   elseif self.minimapButton then
@@ -2284,7 +2272,7 @@ SlashCmdList.COMPACTDRUIDBAR = function(msg)
   elseif cmd == "spells" then
     if ns.OpenOptions then ns:OpenOptions("spells") end
   elseif cmd == "minimap" then
-    ns.db.minimap.hide = not ns.db.minimap.hide
+    ns.global.minimap.hide = not ns.global.minimap.hide
     ns:UpdateMinimap()
     if ns.RefreshOptions then ns.RefreshOptions() end
   elseif cmd == "" or cmd == "config" or cmd == "options" then
@@ -2320,7 +2308,8 @@ function ns:Debug()
     show("Combo points", UnitPower("player", 4))
     show("Shift cost (used)", ns.modules.mana.ShiftCost())
     show("Shift cost (game)", ns.modules.mana.ApiShiftCost())
-    show("Shift cost (measured cat/bear)", tostring(ns.db.shiftCost.cat) .. " / " .. tostring(ns.db.shiftCost.bear))
+    show("Shift cost (measured cat/bear)", tostring(ns.charData.shiftCost.cat) .. " / " .. tostring(ns.charData.shiftCost.bear))
+    print(("  Profile: %s (%s), spec: %s"):format(tostring(ns.activeProfile), select(2, ns:WantedProfile()) or "?", tostring(ns:CurrentSpec())))
     show("Form", ns.form)
     local buffs, berr = ScanAuras("player", "HELPFUL")
     print(("  Buffs read: %d%s"):format(#buffs, berr and (" (ERROR " .. berr .. ")") or ""))

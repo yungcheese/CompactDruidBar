@@ -10,4 +10,5 @@
 ## AddonCompartmentFuncOnLeave: CompactDruidBar_OnAddonCompartmentLeave
 
 Core.lua
+Profiles.lua
 Options.lua

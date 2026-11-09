@@ -1,5 +1,5 @@
 -- Compact Druid Bar - options panel (Esc > Options > AddOns > Compact Druid Bar, or /cdb)
--- Pages: General (main), Layout, Look, Alerts and Spells (custom + built-in spells).
+-- Pages: General (main), Layout, Look, Alerts, Spells (custom + built-in spells) and Profiles.
 
 local ADDON, ns = ...
 
@@ -248,7 +248,7 @@ local L, R, COLW = 16, 340, 290
 local function BuildGeneral()
   local panel, c = MakePage("Compact Druid Bar", 560)
   PageTitle(c, "Compact Druid Bar",
-    "Unlock to move. Drag moves the bar, Shift+drag detaches an element, right-click attaches it again, mouse wheel scales. More settings in the sub-pages: Layout, Look, Alerts and Spells.")
+    "Unlock to move. Drag moves the bar, Shift+drag detaches an element, right-click attaches it again, mouse wheel scales. More settings in the sub-pages: Layout, Look, Alerts, Spells and Profiles.")
 
   -- Left: controls and position
   local y = Section(c, L, -80, COLW, "Bar")
@@ -257,7 +257,7 @@ local function BuildGeneral()
   Button(c, L + 146, y, 140, "Test clearcast", function() ns:TestClearcast() end)
   y = y - 28
   Button(c, L, y, 140, "Reset positions", function() ns:ResetPositions(); ns.RefreshOptions() end)
-  Button(c, L + 146, y, 140, "Reset all", function() ns:ResetAll(); ns.RefreshOptions() end)
+  Button(c, L + 146, y, 140, "Reset profile", function() ns:ResetAll(); ns.RefreshOptions() end)
 
   y = Section(c, L, y - 40, COLW, "Position")
   Text(c, L, y - 4, "X:")
@@ -285,8 +285,8 @@ local function BuildGeneral()
   hint:SetTextColor(0.6, 0.6, 0.6)
 
   y = Section(c, L, y - 56, COLW, "Minimap")
-  Checkbox(c, L, y, "Show minimap button", function() return not db().minimap.hide end,
-    function(v) db().minimap.hide = not v; ns:UpdateMinimap() end)
+  Checkbox(c, L, y, "Show minimap button", function() return not ns.global.minimap.hide end,
+    function(v) ns.global.minimap.hide = not v; ns:UpdateMinimap() end)
 
   -- Right: elements
   y = Section(c, R, -80, COLW, "Elements")
@@ -438,6 +438,112 @@ local function BuildAlerts()
 end
 
 ------------------------------------------------------------------------
+-- Page: Profiles
+------------------------------------------------------------------------
+local REASONS = {
+  raid = "you are in a raid", party = "you are in a party", character = "it is this character's profile",
+  feral = "you have Feral talents", balance = "you have Balance talents", resto = "you have Restoration talents",
+}
+
+local function BuildProfiles()
+  local panel, c = MakePage("Profiles", 560)
+  PageTitle(c, "Profiles", "Save different layouts and switch between them per character, automatically in raids or parties, or by talent spec. Share a layout with the export string.")
+
+  local function ProfileList(withNone)
+    local list = {}
+    if withNone then list[1] = { "", "(don't switch)" } end
+    for _, n in ipairs(ns:ProfileNames()) do list[#list + 1] = { n, n } end
+    return list
+  end
+
+  -- Left: active profile and managing profiles
+  local y = Section(c, L, -80, COLW, "Profile")
+  local active = Text(c, L, y)
+  active:SetWidth(COLW)
+  OnRefresh(function()
+    local _, why = ns:WantedProfile()
+    active:SetText(("Active now: |cffffd100%s|r\n|cff999999because %s|r"):format(ns.activeProfile or "?", REASONS[why] or why or "?"))
+  end)
+  y = y - 40
+  Text(c, L, y - 4, "This character:")
+  Dropdown(c, L + 96, y, 190, function() return ProfileList(false) end,
+    function() return ns.charData.profile end,
+    function(v) ns:SetCharacterProfile(v); ns.RefreshOptions() end)
+
+  y = y - 36
+  Text(c, L, y - 4, "Name:")
+  local nameBox = EditBox(c, L + 40, y, 150)
+  local status = Text(c, L, y - 92, "")
+  status:SetWidth(COLW)
+  local function Report(ok, msg)
+    status:SetText(msg or "")
+    if ok then status:SetTextColor(0.4, 1, 0.4) else status:SetTextColor(1, 0.4, 0.4) end
+    if ok then nameBox:SetText("") end
+    ns.RefreshOptions()
+  end
+  y = y - 28
+  Button(c, L, y, 140, "New (defaults)", function() Report(ns:CreateProfile(nameBox:GetText(), false)) end)
+  Button(c, L + 146, y, 140, "Copy active", function() Report(ns:CreateProfile(nameBox:GetText(), true)) end)
+  y = y - 26
+  Button(c, L, y, 140, "Rename active", function() Report(ns:RenameProfile(ns.activeProfile, nameBox:GetText())) end)
+  local delBtn
+  delBtn = Button(c, L + 146, y, 140, "Delete active", function()
+    if not delBtn.armed then
+      delBtn.armed = true
+      delBtn:SetText("Click to confirm")
+      C_Timer.After(3, function() delBtn.armed = nil; delBtn:SetText("Delete active") end)
+      return
+    end
+    delBtn.armed = nil
+    delBtn:SetText("Delete active")
+    Report(ns:DeleteProfile(ns.activeProfile))
+  end)
+  y = y - 26
+  Button(c, L, y, 140, "Reset to defaults", function()
+    ns:ResetProfile()
+    Report(true, ("Profile \"%s\" reset."):format(ns.activeProfile))
+  end)
+
+  -- Right: automatic switching
+  y = Section(c, R, -80, COLW, "Automatic switching")
+  local hint = Text(c, R, y, "Overrides the character's profile. Checked from top to bottom; the first that applies wins.")
+  hint:SetWidth(COLW)
+  hint:SetTextColor(0.6, 0.6, 0.6)
+  y = y - 34
+  for _, rule in ipairs(ns.RULES) do
+    Text(c, R, y - 4, rule.label .. ":")
+    Dropdown(c, R + 120, y, 170, function() return ProfileList(true) end,
+      function() return ns.charData.rules[rule.key] or "" end,
+      function(v) ns:SetRule(rule.key, v ~= "" and v or nil); ns.RefreshOptions() end)
+    y = y - 28
+  end
+
+  -- Bottom: share
+  y = Section(c, L, -380, 614, "Share")
+  local share = EditBox(c, L, y, 600)
+  share:SetMaxLetters(0)
+  share:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
+  y = y - 28
+  Button(c, L, y, 170, "Export active profile", function()
+    share:SetText(ns:ExportProfile())
+    share:SetFocus()
+    share:HighlightText()
+    Report(true, "Copied into the box: press Ctrl+C to copy it.")
+  end)
+  Text(c, L + 186, y - 4, "Import as:")
+  local importName = EditBox(c, L + 246, y, 140)
+  Button(c, L + 404, y, 110, "Import", function()
+    local ok, msg = ns:ImportProfile(share:GetText(), importName:GetText())
+    if ok then importName:SetText("") end
+    Report(ok, msg)
+  end)
+  local shareHint = Text(c, L, y - 30, "Export puts a text string in the box to share. To import, paste someone's string (Ctrl+V), enter a name and click Import.")
+  shareHint:SetWidth(614)
+  shareHint:SetTextColor(0.6, 0.6, 0.6)
+  return panel
+end
+
+------------------------------------------------------------------------
 -- Page 2: Spells
 ------------------------------------------------------------------------
 local KINDS = { { "cd", "Cooldown" }, { "buff", "Buff on me" }, { "debuff", "Debuff on target" } }
@@ -556,6 +662,7 @@ function ns:BuildOptions()
   local subs = { BuildLayout(), BuildLook(), BuildAlerts() }
   local spells = BuildSpells()
   subs[#subs + 1] = spells
+  subs[#subs + 1] = BuildProfiles()
   if Settings and Settings.RegisterCanvasLayoutCategory then
     local cat = Settings.RegisterCanvasLayoutCategory(general, general.name)
     Settings.RegisterAddOnCategory(cat)
