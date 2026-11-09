@@ -43,6 +43,7 @@ local DEFAULTS = {
   ccGlow = true, ccSound = true, ccFlash = true,
   ccSoundKey = "fid:569649", ccSoundChannel = "Master",
   bleedWarn = true, consumables = true, cpGlow = true, gcdSpark = true,
+  trainerHelper = true, levelUpReminder = true,
   style = "gold", gems = true, iconBorder = true, panel = true, barSpark = true,
   iconSizes = { debuffs = 22, cooldowns = 22, buffs = 22 }, -- per icon row
   point = { "CENTER", "UIParent", "CENTER", 0, -160 },

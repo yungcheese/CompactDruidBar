@@ -401,7 +401,11 @@ local function BuildAlerts()
   Button(c, L, y, 140, "Test clearcast", function() ns:TestClearcast() end)
 
   y = Section(c, L, y - 40, COLW, "Warnings")
-  Checkbox(c, L, y, "Rip/Rake refresh warning (last 2 sec)", Flag("bleedWarn"))
+  Checkbox(c, L, y, "Rip/Rake refresh warning (last 2 sec)", Flag("bleedWarn")); y = y - 24
+
+  y = Section(c, L, y - 16, COLW, "Leveling")
+  Checkbox(c, L, y, "Trainer helper (what's worth buying)", Flag("trainerHelper")); y = y - 24
+  Checkbox(c, L, y, "Note on level-up: new at the trainer", Flag("levelUpReminder"))
 
   y = Section(c, R, -80, COLW, "Sound")
   Text(c, R, y - 4, "Sound:")
