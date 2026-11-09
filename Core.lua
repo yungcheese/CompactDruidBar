@@ -176,7 +176,18 @@ local function FaerieFireNames()
   end
   return FF_BASE
 end
+local knownCache = {}
+local KnownIDUncached
 local function KnownID(key)
+  local c = knownCache[key]
+  if c == nil then
+    c = KnownIDUncached(key) or false
+    knownCache[key] = c
+  end
+  return c or nil
+end
+function ns.ClearSpellCache() wipe(knownCache) end
+function KnownIDUncached(key)
   local ids = S[key]
   if not ids then return end
   for i = #ids, 1, -1 do
@@ -636,7 +647,12 @@ do
   end
 
   m.frame:SetScript("OnUpdate", function()
-    if ns.db and ns.db.gcdSpark then
+    if not (ns.db and (ns.db.gcdSpark or ns.db.energyTick)) then
+      if m.gcd:IsShown() then m.gcd:Hide() end
+      if m.spark:IsShown() then m.spark:Hide() end
+      return
+    end
+    if ns.db.gcdSpark then
       local s, d = GetCooldown(61304) -- 61304 = global cooldown
       if not readable(s, d) then
         -- Secret in combat: estimate from our own last cast (Classic GCD: 1.0s cat, 1.5s otherwise).
@@ -1205,8 +1221,11 @@ do
   end
 
   -- Bleed refresh warning: Rip/Rake icon blinks red during its last 2 seconds.
-  m.frame:SetScript("OnUpdate", function()
-    if not ns.db then return end
+  local acc = 0
+  m.frame:SetScript("OnUpdate", function(_, elapsed)
+    acc = acc + elapsed
+    if acc < 0.04 or not ns.db or m.count == 0 then return end
+    acc = 0
     local now = GetTime()
     for i = 1, m.count do
       local ic = m.icons[i]
@@ -1359,7 +1378,11 @@ do
     end
   end
   -- Dim a tracked buff again when its timer runs out.
-  m.frame:SetScript("OnUpdate", function()
+  local acc = 0
+  m.frame:SetScript("OnUpdate", function(_, elapsed)
+    acc = acc + elapsed
+    if acc < 0.1 or m.count == 0 then return end
+    acc = 0
     local now = GetTime()
     for i = 1, m.count do
       local ic, slot = m.icons[i], m.slots and m.slots[i]
@@ -1954,6 +1977,19 @@ end
 ------------------------------------------------------------------------
 -- Visibility (dimmed out of combat)
 ------------------------------------------------------------------------
+function ns:UpdateBars(which)
+  for _, k in ipairs(which or { "health", "power", "combo", "mana" }) do
+    if self.modules[k].frame:IsShown() then self.modules[k]:Update() end
+  end
+end
+local lastAlpha
+function ns:UpdateAlpha(force)
+  local a = self.ComputeAlpha()
+  if a == lastAlpha and not force then return end
+  lastAlpha = a
+  for _, key in ipairs(self.MODULE_ORDER) do self.modules[key].frame:SetAlpha(a) end
+  self.panel:SetAlpha(a)
+end
 local function ComputeAlpha()
   local db = ns.db
   if not db.locked then return 1 end
@@ -1971,6 +2007,7 @@ local function ComputeAlpha()
   if not ok or full then return db.oocAlpha end
   return 1
 end
+ns.ComputeAlpha = ComputeAlpha
 
 ------------------------------------------------------------------------
 -- Events
@@ -2041,17 +2078,17 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
     TryRegister("UNIT_DISPLAYPOWER", "player")
     TryRegister("UNIT_MAXPOWER", "player")
 
+    TryRegister("UNIT_HEALTH", "player")
+    TryRegister("UNIT_MAXHEALTH", "player")
+    -- Bars update on their events; this loop is only a slow safety net
+    -- (and keeps the out-of-combat fade current).
     ev:SetScript("OnUpdate", function(_, elapsed)
       ns.t1 = (ns.t1 or 0) + elapsed
       ns.t2 = (ns.t2 or 0) + elapsed
-      if ns.t1 >= 0.05 then
+      if ns.t1 >= 0.25 then
         ns.t1 = 0
-        for _, k in ipairs({ "health", "power", "combo", "mana" }) do
-          if ns.modules[k].frame:IsShown() then ns.modules[k]:Update() end
-        end
-        local a = ComputeAlpha()
-        for _, key in ipairs(ns.MODULE_ORDER) do ns.modules[key].frame:SetAlpha(a) end
-        ns.panel:SetAlpha(a)
+        ns:UpdateBars()
+        ns:UpdateAlpha()
       end
       if ns.t2 >= 0.1 then
         ns.t2 = 0
@@ -2073,7 +2110,11 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
   if event == "PLAYER_ENTERING_WORLD" or event == "UPDATE_SHAPESHIFT_FORM" or event == "UPDATE_SHAPESHIFT_FORMS"
     or event == "SPELLS_CHANGED" or event == "CHARACTER_POINTS_CHANGED" or event == "UNIT_DISPLAYPOWER"
     or event == "UNIT_MAXPOWER" then
+    if event == "SPELLS_CHANGED" or event == "CHARACTER_POINTS_CHANGED" then ns.ClearSpellCache() end
     ns:Refresh()
+    ns:UpdateAlpha(true)
+  elseif event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then
+    ns:UpdateBars({ "health" })
   elseif event == "UNIT_AURA" then
     if arg1 == "player" then
       ns.modules.buffs:Update()
@@ -2087,15 +2128,18 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
     ns.modules.debuffs.targetChanged = true
     ns.modules.debuffs:Update()
     ns.modules.combo:Update()
+    ns:UpdateAlpha()
   elseif event == "SPELL_UPDATE_COOLDOWN" or event == "BAG_UPDATE_COOLDOWN" or event == "BAG_UPDATE_DELAYED" then
     ns.modules.cooldowns:Update()
   elseif event == "UNIT_POWER_FREQUENT" then
     ns.modules.power:OnPower()
+    ns:UpdateBars({ "power", "mana", "combo" })
   elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
     ns.modules.power:OnCast()
     ns.modules.mana:OnCast(arg3)
     ns:TrackCast(arg3)
   elseif event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" then
+    ns:UpdateAlpha()
     ns.modules.buffs:Update()
     ns.modules.debuffs:Update()
   end
