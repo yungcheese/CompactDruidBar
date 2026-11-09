@@ -38,7 +38,8 @@ ns.MODULE_LABELS = {
 local DEFAULTS = {
   locked = true,
   scale = 1, width = 170, barHeight = 14, smallBarHeight = 8, iconSize = 22,
-  fontSize = 10, spacing = 2, oocAlpha = 0.4, iconLines = 0,
+  fontSize = 10, spacing = 2, oocAlpha = 0.4, iconLines = 0, groupGap = 0,
+  shiftCost = {}, -- measured mana cost of a shift per form ("cat", "bear")
   showText = true, energyTick = true, manaTicks = true, mergeIcons = true,
   ccGlow = true, ccSound = true, ccFlash = true,
   ccSoundKey = "fid:569649", ccSoundChannel = "Master",
@@ -724,10 +725,53 @@ do
     local max = UnitPowerMax("player", 0)
     return not readable(max) or (max or 0) > 0
   end
-  local function ShiftCost()
+  local function FormKey() return ns.form == "bear" and "bear" or "cat" end
+  -- Cost reported by the game for the form spell.
+  local function ApiShiftCost()
     local id = CAT_FORM
     if ns.form == "bear" then id = IsKnown(DIRE_BEAR_FORM) and DIRE_BEAR_FORM or BEAR_FORM end
     return PowerCost(id)
+  end
+  -- The real mana drop of your last out-of-combat shift into this form wins,
+  -- because the reported cost doesn't always match what is actually spent.
+  local function ShiftCost()
+    local measured = ns.db and ns.db.shiftCost and ns.db.shiftCost[FormKey()]
+    if type(measured) == "number" and measured > 0 then return measured end
+    return ApiShiftCost()
+  end
+  m.ApiShiftCost = ApiShiftCost
+
+  -- Measuring: a mana drop within half a second of casting a form spell
+  -- (in either order) is that shift's cost. Only possible while mana is readable.
+  local FORM_NAMES = { ["Cat Form"] = "cat", ["Bear Form"] = "bear", ["Dire Bear Form"] = "bear" }
+  local FORM_IDS = { [CAT_FORM] = "cat", [BEAR_FORM] = "bear", [DIRE_BEAR_FORM] = "bear" }
+  function m:TryMeasure()
+    if not (self.castT and self.dropT) then return end
+    if math.abs(self.castT - self.dropT) > 0.5 then return end
+    if self.drop and self.drop > 0 then ns.db.shiftCost[self.castKey] = self.drop end
+    self.castT, self.dropT = nil, nil
+  end
+  function m:OnCast(spellID)
+    if not readable(spellID) then return end
+    local key = FORM_IDS[spellID]
+    if not key then
+      local ok, name = pcall(function()
+        if C_Spell and C_Spell.GetSpellName then return C_Spell.GetSpellName(spellID) end
+        return GetSpellInfo(spellID)
+      end)
+      key = ok and readable(name) and FORM_NAMES[name]
+    end
+    if not key then return end
+    self.castT, self.castKey = GetTime(), key
+    self:TryMeasure()
+  end
+  function m:WatchMana(cur)
+    if not readable(cur) then self.lastCur = nil return end
+    if self.lastCur and cur < self.lastCur then
+      self.dropT, self.drop = GetTime(), self.lastCur - cur
+      self:TryMeasure()
+    end
+    self.lastCur = cur
   end
   function m:PlaceTicks(cost, max)
     local key = ns.db.manaTicks and (cost .. ":" .. max .. ":" .. math.floor(self.bar.bar:GetWidth())) or "off"
@@ -758,6 +802,7 @@ do
   function m:Update()
     local cur, max = UnitPower("player", 0), UnitPowerMax("player", 0)
     SetBar(self.bar, cur, max)
+    self:WatchMana(cur)
     local cost = ShiftCost()
     local costOK = readable(max, cost) and type(cost) == "number" and cost > 0 and type(max) == "number" and max > 0
     -- Tick marks only need max + cost, so they work even when current mana is secret.
@@ -1636,7 +1681,8 @@ function ns:Layout()
   -- spread evenly over as few lines as fit the width (e.g. 8 icons -> 4 + 4
   -- instead of 3 groups on 3 lines). A group may continue on the next line.
   if #flow > 0 then
-    local gap, sp = db.spacing + 6, db.spacing
+    local sp = db.spacing
+    local gap = sp + (db.groupGap or 0)
     local items = {}
     for _, m in ipairs(flow) do
       local sz = m:Size()
@@ -1944,6 +1990,7 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
     ns.modules.power:OnPower()
   elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
     ns.modules.power:OnCast()
+    ns.modules.mana:OnCast(arg3)
     ns:TrackCast(arg3)
   elseif event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" then
     ns.modules.buffs:Update()
@@ -2124,7 +2171,9 @@ function ns:Debug()
     show("Mana", UnitPower("player", 0))
     show("Mana max", UnitPowerMax("player", 0))
     show("Combo points", UnitPower("player", 4))
-    show("Shift cost", ns.modules.mana.ShiftCost())
+    show("Shift cost (used)", ns.modules.mana.ShiftCost())
+    show("Shift cost (game)", ns.modules.mana.ApiShiftCost())
+    show("Shift cost (measured cat/bear)", tostring(ns.db.shiftCost.cat) .. " / " .. tostring(ns.db.shiftCost.bear))
     show("Form", ns.form)
     local buffs, berr = ScanAuras("player", "HELPFUL")
     print(("  Buffs read: %d%s"):format(#buffs, berr and (" (ERROR " .. berr .. ")") or ""))

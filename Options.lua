@@ -351,7 +351,10 @@ local function BuildLayout()
   })
   y = Section(c, R, y - 6, COLW, "Icon arrangement")
   Checkbox(c, R, y, "Merge icon rows together", Flag("mergeIcons")); y = y - 30
-  Sliders(R, y, { { "Max lines (0 = fit bar width)", 0, 4, 1, "iconLines" } })
+  Sliders(R, y, {
+    { "Max lines (0 = fit bar width)", 0, 4, 1, "iconLines" },
+    { "Extra gap between groups", 0, 12, 1, "groupGap" },
+  })
   return panel
 end
 
