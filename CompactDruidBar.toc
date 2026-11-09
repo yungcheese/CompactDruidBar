@@ -3,6 +3,7 @@
 ## Notes: Compact, scalable druid bar: health, energy/rage, combo points, mana + powershifts, energy tick, clearcasting, debuffs, cooldowns and buffs.
 ## Author: Mula Moos
 ## Version: @project-version@
+## X-Curse-Project-ID: 1791757
 ## SavedVariables: CompactDruidBarDB
 ## IconTexture: 132115
 ## AddonCompartmentFunc: CompactDruidBar_OnAddonCompartmentClick
