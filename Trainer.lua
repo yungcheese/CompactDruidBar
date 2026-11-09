@@ -23,6 +23,24 @@ local WEIGHT = {
 }
 local ROLE_NAMES = { feral = "Feral", balance = "Balance", resto = "Restoration" }
 
+-- Utility spells where rank 1 does the job while leveling: higher ranks only
+-- add a bit of health/mana on a res or a longer effect. Once you have rank 1,
+-- higher ranks go to "Skip for now". Revive is WoW Forever's out-of-combat res.
+local RANK1_IDS = { 20484, 2637, 2908, 339 } -- Rebirth, Hibernate, Soothe Animal, Entangling Roots
+local RANK1_NAMES = { ["Revive"] = true }
+local rank1
+local function Rank1Enough(name)
+  if not rank1 then
+    rank1 = {}
+    for n in pairs(RANK1_NAMES) do rank1[n] = true end
+    for _, id in ipairs(RANK1_IDS) do
+      local n = ns.SpellName and ns.SpellName(id)
+      if n then rank1[n] = true end
+    end
+  end
+  return rank1[name]
+end
+
 local nameGroup
 local function GroupOf(name)
   if not nameGroup then
@@ -87,6 +105,9 @@ local function ReadServices()
         cost = SafeCall(GetTrainerServiceCost, i) or 0,
         verdict = Verdict(name),
       }
+      local s = list[#list]
+      local r = tonumber(s.rank and s.rank:match("%d+"))
+      if r and r > 1 and Rank1Enough(name) then s.verdict, s.rank1 = "wait", true end
     end
   end
   return list
@@ -175,6 +196,7 @@ local function Update()
     for _, s in ipairs(g) do
       local r = ShortRank(s.rank)
       t[#t + 1] = s.name .. (r ~= "" and (" |cff999999" .. r .. "|r") or "")
+        .. (s.rank1 and " |cff999999(rank 1 is enough)|r" or "")
     end
     return table.concat(t, ", ")
   end
@@ -223,7 +245,9 @@ local function OnLevelUp(level)
   local useful, other, cost = {}, 0, 0
   for _, s in ipairs(ns.charData.trainer) do
     if s.level == level then
-      if Verdict(s.name) == "useful" then
+      local r = tonumber(s.rank and s.rank:match("%d+"))
+      local skip = r and r > 1 and Rank1Enough(s.name)
+      if not skip and Verdict(s.name) == "useful" then
         useful[#useful + 1] = s.name .. (s.rank ~= "" and (" (" .. s.rank .. ")") or "")
         cost = cost + (s.cost or 0)
       else
