@@ -145,13 +145,44 @@ local NAME_ALIASES = {
   ffFeral = { "Faerie Fire (Feral)" },
   pounce = { "Pounce" }, -- S.pounce holds the bleed debuff IDs, the castable spell is found by name
 }
+-- Same spells as NAME_ALIASES, but by an ID whose name the game gives us in the
+-- client's own language (so lookups by name also work on non-English clients).
+local ALIAS_IDS = { pounce = { 9005, 9823, 9827 } }
+local function GameName(id)
+  local n
+  if C_Spell and C_Spell.GetSpellName then n = SafeCall(C_Spell.GetSpellName, id)
+  else n = SafeCall(GetSpellInfo, id) end
+  if n and readable(n) then return n end
+end
+local function AliasNames(key)
+  local list = {}
+  for _, n in ipairs(NAME_ALIASES[key] or {}) do list[#list + 1] = n end
+  for _, id in ipairs(ALIAS_IDS[key] or {}) do
+    local n = GameName(id)
+    if n then list[#list + 1] = n end
+  end
+  return list
+end
+-- Localized base name(s) of Faerie Fire, for the loose match below.
+local FF_BASE
+local function FaerieFireNames()
+  if not FF_BASE then
+    FF_BASE = {}
+    for _, id in ipairs({ 770, 778, 9749, 9907 }) do
+      local n = GameName(id)
+      if n then FF_BASE[n] = true end
+    end
+    if not next(FF_BASE) then return {} end -- not loaded yet, try again later
+  end
+  return FF_BASE
+end
 local function KnownID(key)
   local ids = S[key]
   if not ids then return end
   for i = #ids, 1, -1 do
     if IsKnown(ids[i]) then return ids[i] end
   end
-  for _, name in ipairs(NAME_ALIASES[key] or {}) do
+  for _, name in ipairs(AliasNames(key)) do
     local info = C_Spell and SafeCall(C_Spell.GetSpellInfo, name)
     if type(info) == "table" and info.spellID then
       -- Remember this client's ID so auras and casts with it are recognized too.
@@ -167,8 +198,8 @@ local function KeyFromName(name)
   if not name or not readable(name) then return end
   if not NAME_TO_KEY then
     NAME_TO_KEY = {}
-    for key, aliases in pairs(NAME_ALIASES) do
-      for _, n in ipairs(aliases) do NAME_TO_KEY[n] = key end
+    for key in pairs(NAME_ALIASES) do
+      for _, n in ipairs(AliasNames(key)) do NAME_TO_KEY[n] = key end
     end
     for key, ids in pairs(S) do
       for _, id in ipairs(ids) do
@@ -180,6 +211,11 @@ local function KeyFromName(name)
   local key = NAME_TO_KEY[name]
   if key then return key end
   -- Looser match for clients that name it differently ("Faerie Fire (Feral)", rank suffixes, ...).
+  -- Works in any language: the plain name is "ff", a longer name starting with it is the feral one.
+  for base in pairs(FaerieFireNames()) do
+    if name == base then return "ff" end
+    if name:sub(1, #base) == base then return "ffFeral" end
+  end
   if name:find("Faerie Fire", 1, true) then
     return name:find("Feral", 1, true) and "ffFeral" or "ff"
   end
@@ -551,8 +587,32 @@ do
     local phase = ((best - 1 + 0.5 + offset) * 2 / NB) % 2
     self.lastTick = phase + 2 -- (GetTime() - lastTick) % 2 gives the position in the cycle
   end
+  -- Energy update rhythm. Classic ticks every 2 sec; some clients (like WoW
+  -- Forever) regenerate energy continuously instead. We keep the last update
+  -- times; when they come much faster than ticks while we're not casting,
+  -- regen is continuous and a tick timer means nothing, so the spark hides.
+  m.evTimes = {}
+  function m:RecordEnergyEvent()
+    local now = GetTime()
+    local t = self.evTimes
+    t[#t + 1] = now
+    if #t > 40 then table.remove(t, 1) end
+  end
+  -- Returns median interval and number of samples (casts excluded).
+  function m:EnergyRhythm()
+    local t, gaps = self.evTimes, {}
+    for i = 2, #t do gaps[#gaps + 1] = t[i] - t[i - 1] end
+    if #gaps < 8 then return nil, #gaps end
+    table.sort(gaps)
+    return gaps[math.floor(#gaps / 2) + 1], #gaps
+  end
+  function m:IsContinuousRegen()
+    local med, n = self:EnergyRhythm()
+    return med ~= nil and n >= 8 and med < 0.6
+  end
   function m:OnPower()
     if UnitPowerType("player") ~= 3 then self.lastPower = nil return end
+    if not (self.gcdStart and GetTime() - self.gcdStart < 0.25) then self:RecordEnergyEvent() end
     local e, max = UnitPower("player", 3), UnitPowerMax("player", 3)
     if not readable(e, max) then self:OnPowerSecret() return end
     if self.lastPower and e > self.lastPower then
@@ -594,7 +654,8 @@ do
     else
       m.gcd:Hide()
     end
-    if ns.db and ns.db.energyTick and m.lastTick > 0 and UnitPowerType("player") == 3 then
+    if ns.db and ns.db.energyTick and m.lastTick > 0 and UnitPowerType("player") == 3
+      and not m:IsContinuousRegen() then
       local w = m.bar.bar:GetWidth()
       local x = w * (((GetTime() - m.lastTick) % 2) / 2)
       m.spark:ClearAllPoints()
@@ -744,6 +805,16 @@ do
   -- Measuring: a mana drop within half a second of casting a form spell
   -- (in either order) is that shift's cost. Only possible while mana is readable.
   local FORM_NAMES = { ["Cat Form"] = "cat", ["Bear Form"] = "bear", ["Dire Bear Form"] = "bear" }
+  local formNamesLocalized
+  local function LocalizeFormNames()
+    if formNamesLocalized then return end
+    local any = false
+    for id, key in pairs({ [CAT_FORM] = "cat", [BEAR_FORM] = "bear", [DIRE_BEAR_FORM] = "bear" }) do
+      local n = ns.SpellName(id)
+      if n and readable(n) then FORM_NAMES[n] = key; any = true end
+    end
+    formNamesLocalized = any
+  end
   local FORM_IDS = { [CAT_FORM] = "cat", [BEAR_FORM] = "bear", [DIRE_BEAR_FORM] = "bear" }
   function m:TryMeasure()
     if not (self.castT and self.dropT) then return end
@@ -759,6 +830,7 @@ do
         if C_Spell and C_Spell.GetSpellName then return C_Spell.GetSpellName(spellID) end
         return GetSpellInfo(spellID)
       end)
+      LocalizeFormNames()
       key = ok and readable(name) and FORM_NAMES[name]
     end
     if not key then return end
@@ -2262,4 +2334,13 @@ function ns:Debug()
         math.floor(pw or 0), math.floor(ph or 0), ns.panel:GetEffectiveAlpha() or 0))
     end)
     print(("  Energy tick known: %s"):format(tostring(ns.modules.power.lastTick > 0)))
+    try("Energy rhythm", function()
+      local pm = ns.modules.power
+      local med, n = pm:EnergyRhythm()
+      local t = pm.evTimes
+      local span = #t > 1 and (t[#t] - t[1]) or 0
+      print(("  Energy updates: %d in %.1fs, median gap: %s -> %s"):format(
+        #t, span, med and ("%.2fs"):format(med) or "not enough data (be in cat form ~10s after spending energy)",
+        med and (pm:IsContinuousRegen() and "CONTINUOUS regen (tick timer hidden)" or "TICKS") or "?"))
+    end)
 end
