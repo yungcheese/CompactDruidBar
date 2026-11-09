@@ -7,6 +7,7 @@
 - **Food buff reminder**: an icon in the buff row that turns red without a food buff and blinks in its last minute, plus a chat note when it runs out. "Well Fed" is recognized automatically; any other food buff (like the new WoW Forever foods) can be picked in the options
 - **Caster view**: in caster form with a friendly target, the target row shows your Rejuvenation and Regrowth timers
 - Powershift marks now count back from your current mana (each segment is exactly one shift) and use the measured mana cost of your shifts
+- Nature's Grasp shows as one icon: its cooldown icon turns green with the buff timer while the buff is up
 - Icons are evenly spaced; optional extra gap between groups
 - Energy tick timer hides itself on clients where energy regenerates continuously (like WoW Forever)
 - Spell and form names are read from the game, so the addon works on non-English clients
