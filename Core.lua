@@ -784,15 +784,32 @@ do
       local t = self.ticks[i]
       if i <= n then
         if not t then
-          t = self.bar.bar:CreateTexture(nil, "OVERLAY", nil, 6)
+          if not self.tickHolder then
+            -- Ticks hang off the end of the fill, so marks that would fall left
+            -- of the bar are clipped away by this frame.
+            local clip = CreateFrame("Frame", nil, self.bar.bar)
+            clip:SetAllPoints()
+            if clip.SetClipsChildren then clip:SetClipsChildren(true) end
+            clip:SetFrameLevel(self.bar.bar:GetFrameLevel() + 1)
+            self.tickHolder = CreateFrame("Frame", nil, clip)
+            self.tickHolder:SetAllPoints()
+            -- Keep the text above the ticks.
+            local top = self:TextLayer()
+            top:SetFrameLevel(clip:GetFrameLevel() + 2)
+          end
+          t = self.tickHolder:CreateTexture(nil, "OVERLAY", nil, 6)
           t:SetColorTexture(0, 0, 0, 0.85)
           t:SetWidth(1)
           self.ticks[i] = t
         end
-        local x = w * (i * cost / max)
+        -- Measured back from the current mana: every segment from the end of
+        -- the fill is exactly one shift, the leftover sits at the left edge.
+        -- Anchoring to the fill texture works even when mana is secret.
+        local fill = self.bar.bar:GetStatusBarTexture()
+        local x = -w * (i * cost / max)
         t:ClearAllPoints()
-        t:SetPoint("TOP", self.bar.bar, "TOPLEFT", x, 0)
-        t:SetPoint("BOTTOM", self.bar.bar, "BOTTOMLEFT", x, 0)
+        t:SetPoint("TOP", fill, "TOPRIGHT", x, 0)
+        t:SetPoint("BOTTOM", fill, "BOTTOMRIGHT", x, 0)
         t:Show()
       elseif t then
         t:Hide()
@@ -833,6 +850,20 @@ do
   function m.CurvesSupported()
     return C_CurveUtil and C_CurveUtil.CreateCurve and UnitPowerPercent and Enum and Enum.LuaCurveType and true or false
   end
+  -- Frame above the tick marks that carries the bar texts.
+  function m:TextLayer()
+    if not self.textLayer then
+      local f = CreateFrame("Frame", nil, self.bar.bar)
+      f:SetAllPoints()
+      f:SetFrameLevel(self.bar.bar:GetFrameLevel() + 3)
+      for _, fs in ipairs({ self.bar.textL, self.bar.textC, self.bar.textR }) do
+        if fs then fs:SetParent(f) end
+      end
+      for _, fs in ipairs(self.shiftFS) do fs:SetParent(f) end
+      self.textLayer = f
+    end
+    return self.textLayer
+  end
   function m:HideShift()
     for _, fs in ipairs(self.shiftFS) do fs:Hide() end
   end
@@ -856,7 +887,7 @@ do
         c:AddPoint(hi, 0)
         local fs = self.shiftFS[k + 1]
         if not fs then
-          fs = NewFS(self.bar.bar, "CENTER")
+          fs = NewFS(self:TextLayer(), "CENTER")
           fs:SetPoint("CENTER")
           self.shiftFS[k + 1] = fs
         end
