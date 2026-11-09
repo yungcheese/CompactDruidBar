@@ -44,7 +44,7 @@ local DEFAULTS = {
   ccSoundKey = "fid:569649", ccSoundChannel = "Master",
   bleedWarn = true, consumables = true, cpGlow = true, gcdSpark = true,
   trainerHelper = true, levelUpReminder = true, casterView = true,
-  foodBuff = true, foodWarn = true,
+  foodBuff = true, foodWarn = true, role = "auto",
   style = "gold", gems = true, iconBorder = true, panel = true, barSpark = true,
   iconSizes = { debuffs = 22, cooldowns = 22, buffs = 22 }, -- per icon row
   point = { "CENTER", "UIParent", "CENTER", 0, -160 },
@@ -2430,7 +2430,18 @@ function ns:Debug()
     show("Shift cost (used)", ns.modules.mana.ShiftCost())
     show("Shift cost (game)", ns.modules.mana.ApiShiftCost())
     show("Shift cost (measured cat/bear)", tostring(ns.charData.shiftCost.cat) .. " / " .. tostring(ns.charData.shiftCost.bear))
-    print(("  Profile: %s (%s), spec: %s"):format(tostring(ns.activeProfile), select(2, ns:WantedProfile()) or "?", tostring(ns:CurrentSpec())))
+    print(("  Profile: %s (%s), spec: %s, role: %s"):format(tostring(ns.activeProfile), select(2, ns:WantedProfile()) or "?",
+      tostring(ns:CurrentSpec()), tostring(ns.CurrentRole and ns:CurrentRole())))
+    try("Talents", function()
+      local parts = {}
+      for i = 1, 3 do
+        local r = { pcall(GetTalentTabInfo, i) }
+        local vals = {}
+        for j = 2, math.min(#r, 7) do vals[#vals + 1] = tostring(r[j]) end
+        parts[#parts + 1] = i .. ": " .. table.concat(vals, ", ")
+      end
+      print("  Talent tabs: " .. table.concat(parts, " | "))
+    end)
     show("Form", ns.form)
     local buffs, berr = ScanAuras("player", "HELPFUL")
     print(("  Buffs read: %d%s"):format(#buffs, berr and (" (ERROR " .. berr .. ")") or ""))

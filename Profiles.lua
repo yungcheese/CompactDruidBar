@@ -89,6 +89,10 @@ end
 ------------------------------------------------------------------------
 -- Which profile should be active right now
 ------------------------------------------------------------------------
+local function SafeNum(fn, ...)
+  local ok, v = pcall(fn, ...)
+  if ok and type(v) == "number" then return v end
+end
 -- Talent tree with the most points: "balance", "feral" or "resto" (nil when unclear).
 function ns:CurrentSpec()
   if not GetTalentTabInfo then return end
@@ -102,6 +106,20 @@ function ns:CurrentSpec()
         if pts > bestPts then best, bestPts, tie = names[i], pts, false
         elseif pts == bestPts and pts > 0 then tie = true end
       end
+    end
+  end
+  if bestPts == 0 and GetNumTalents and GetTalentInfo then
+    -- Fallback: add up the ranks of every talent per tree.
+    tie = false
+    for i = 1, 3 do
+      local pts = 0
+      for j = 1, (SafeNum(GetNumTalents, i) or 0) do
+        local ok, r = pcall(function() return { GetTalentInfo(i, j) } end)
+        local rank = ok and r and r[5]
+        if type(rank) == "number" then pts = pts + rank end
+      end
+      if pts > bestPts then best, bestPts, tie = names[i], pts, false
+      elseif pts == bestPts and pts > 0 then tie = true end
     end
   end
   if tie or bestPts == 0 then return end

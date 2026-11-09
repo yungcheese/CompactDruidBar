@@ -411,7 +411,12 @@ local function BuildAlerts()
 
   y = Section(c, L, y - 16, COLW, "Leveling")
   Checkbox(c, L, y, "Trainer helper (what's worth buying)", Flag("trainerHelper")); y = y - 24
-  Checkbox(c, L, y, "Note on level-up: new at the trainer", Flag("levelUpReminder"))
+  Checkbox(c, L, y, "Note on level-up: new at the trainer", Flag("levelUpReminder")); y = y - 30
+  Text(c, L, y - 4, "Your role:")
+  Dropdown(c, L + 70, y, 200,
+    function() return { { "auto", "Auto (from talents)" }, { "feral", "Feral" }, { "balance", "Balance" }, { "resto", "Restoration" } } end,
+    function() return db().role or "auto" end,
+    function(v) db().role = v end)
 
   y = Section(c, R, -80, COLW, "Sound")
   Text(c, R, y - 4, "Sound:")

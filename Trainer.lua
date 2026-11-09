@@ -21,10 +21,7 @@ local WEIGHT = {
   resto   = { heal = "useful", general = "useful", balance = "optional", feral = "wait" },
   balance = { balance = "useful", general = "useful", heal = "optional", feral = "wait" },
 }
-local LABEL = {
-  useful = "|cff40ff40Useful|r", optional = "|cffffd100Optional|r", wait = "|cff999999Can wait|r",
-  unknown = "|cffccccccOther|r",
-}
+local ROLE_NAMES = { feral = "Feral", balance = "Balance", resto = "Restoration" }
 
 local nameGroup
 local function GroupOf(name)
@@ -40,12 +37,25 @@ local function GroupOf(name)
   return nameGroup[name]
 end
 
+-- Your role: chosen in the options, or taken from your talents.
+function ns:CurrentRole()
+  local r = self.db and self.db.role
+  if r and r ~= "auto" and WEIGHT[r] then return r end
+  return self.CurrentSpec and self:CurrentSpec()
+end
+
 local function Verdict(name)
-  local spec = ns.CurrentSpec and ns:CurrentSpec()
+  local role = ns:CurrentRole()
   local group = GroupOf(name)
   if not group then return "unknown" end
-  if not spec then return "useful" end -- no talents yet: everything helps while leveling
-  return WEIGHT[spec][group] or "unknown"
+  if not role then return "useful" end -- no role known: everything helps while leveling
+  return WEIGHT[role][group] or "unknown"
+end
+
+-- "Rank 5" -> "R5" (keeps the panel compact in every language).
+local function ShortRank(rank)
+  local n = rank and rank:match("%d+")
+  return n and ("R" .. n) or ""
 end
 
 local function Money(c)
@@ -68,6 +78,8 @@ local function ReadServices()
   local n = SafeCall(GetNumTrainerServices) or 0
   for i = 1, n do
     local name, rank, state = SafeCall(GetTrainerServiceInfo, i)
+    local STATES = { available = true, unavailable = true, used = true, header = true }
+    if STATES[rank] and not STATES[state] then rank, state = nil, rank end
     if name and state ~= "header" then
       list[#list + 1] = {
         name = name, rank = rank or "", state = state,
@@ -98,7 +110,7 @@ end
 local panel
 local function BuildPanel()
   panel = CreateFrame("Frame", "CompactDruidBarTrainer", UIParent, "BackdropTemplate")
-  panel:SetSize(250, 300)
+  panel:SetSize(270, 120)
   panel:SetFrameStrata("HIGH")
   panel:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
     edgeSize = 14, insets = { left = 3, right = 3, top = 3, bottom = 3 } })
@@ -106,15 +118,15 @@ local function BuildPanel()
   panel:SetBackdropBorderColor(0.85, 0.68, 0.25, 1)
   panel.title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
   panel.title:SetPoint("TOPLEFT", 10, -10)
-  panel.title:SetText("Compact Druid Bar: what to learn")
   panel.sub = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
   panel.sub:SetPoint("TOPLEFT", 10, -28)
+  panel.sub:SetWidth(250)
   panel.sub:SetJustifyH("LEFT")
   panel.body = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-  panel.body:SetPoint("TOPLEFT", 10, -50)
-  panel.body:SetWidth(230)
+  panel.body:SetPoint("TOPLEFT", panel.sub, "BOTTOMLEFT", 0, -8)
+  panel.body:SetWidth(250)
   panel.body:SetJustifyH("LEFT")
-  panel.body:SetSpacing(2)
+  panel.body:SetSpacing(3)
   local close = CreateFrame("Button", nil, panel, "UIPanelCloseButton")
   close:SetPoint("TOPRIGHT", 2, 2)
   close:SetScript("OnClick", function() panel:Hide() end)
@@ -157,25 +169,41 @@ local function Update()
   dbg.stop = "panel shown"
   if not panel then BuildPanel() end
 
-  local spec = ns.CurrentSpec and ns:CurrentSpec()
-  panel.sub:SetText(spec and ("Based on your " .. spec .. " talents. Nothing is bought for you.")
-    or "No talents yet: everything helps while leveling.")
-  local lines = {}
-  local all = 0
-  for _, key in ipairs({ "useful", "optional", "wait", "unknown" }) do
-    local g = groups[key]
-    if #g > 0 then
-      lines[#lines + 1] = ("%s  %s"):format(LABEL[key], Money(totals[key]))
-      for _, s in ipairs(g) do
-        lines[#lines + 1] = ("   %s |cff999999%s|r"):format(s.name, s.rank)
-      end
-      lines[#lines + 1] = " "
-      all = all + totals[key]
+  local role = ns:CurrentRole()
+  local function Names(g)
+    local t = {}
+    for _, s in ipairs(g) do
+      local r = ShortRank(s.rank)
+      t[#t + 1] = s.name .. (r ~= "" and (" |cff999999" .. r .. "|r") or "")
     end
+    return table.concat(t, ", ")
   end
-  lines[#lines + 1] = "Everything: " .. Money(all)
-  panel.body:SetText(table.concat(lines, "\n"))
-  panel:SetHeight(panel.body:GetStringHeight() + 64)
+  local lines = {}
+  if role then
+    panel.title:SetText("What to learn as " .. ROLE_NAMES[role])
+    panel.sub:SetText("|cff999999Nothing is bought for you. Change the role in the options (Alerts > Leveling).|r")
+    if #groups.useful > 0 then
+      lines[#lines + 1] = ("|cff40ff40Buy|r  %s\n     |cff40ff40%s|r"):format(Names(groups.useful), Money(totals.useful))
+    else
+      lines[#lines + 1] = "|cff40ff40Nothing essential for " .. ROLE_NAMES[role] .. " here.|r"
+    end
+    if #groups.optional > 0 then
+      lines[#lines + 1] = ("|cffffd100Optional|r  %s\n     %s"):format(Names(groups.optional), Money(totals.optional))
+    end
+    if #groups.wait > 0 then
+      lines[#lines + 1] = ("|cff999999Skip for now|r  %s\n     |cff999999saves %s|r"):format(Names(groups.wait), Money(totals.wait))
+    end
+  else
+    panel.title:SetText("What to learn")
+    panel.sub:SetText("|cffff8040No talent spec found.|r Pick your role in the options (Alerts > Leveling) to see what you can skip.")
+    for _, s in ipairs(groups.useful) do groups.unknown[#groups.unknown + 1] = s end
+    totals.unknown = totals.unknown + totals.useful
+  end
+  if #groups.unknown > 0 then
+    lines[#lines + 1] = ("|cffccccccOther|r  %s\n     %s"):format(Names(groups.unknown), Money(totals.unknown))
+  end
+  panel.body:SetText(table.concat(lines, "\n\n"))
+  panel:SetHeight(panel.body:GetStringHeight() + panel.sub:GetStringHeight() + 52)
 
   panel:ClearAllPoints()
   local trainer = ClassTrainerFrame
