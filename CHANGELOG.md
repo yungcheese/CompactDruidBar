@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.1.1
+- Same as v1.1.0, now also published automatically to CurseForge
+
 ## v1.1.0
 - **Profiles**: save different layouts, choose one per character, switch automatically in raids, parties or by talent spec, and share layouts with an export/import string
 - **Trainer helper**: at the class trainer a panel tells you what to buy for your role, what is optional and what you can skip (with the gold it saves). Utility spells where rank 1 is enough (Revive, Rebirth, Hibernate, Soothe Animal, Entangling Roots) go to "skip" from rank 2. Nothing is bought for you; set your role in the options or let it follow your talents
