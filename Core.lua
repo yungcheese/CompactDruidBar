@@ -1359,7 +1359,8 @@ local function FoodNames()
     foodNames = { ["Well Fed"] = true }
     for _, id in ipairs(WELL_FED_IDS) do
       local n = ns.SpellName(id)
-      if n and readable(n) then foodNames[n] = true end
+      -- Skip IDs that are another spell on this client (e.g. one of our own buffs).
+      if n and readable(n) and not KeyFromName(n) then foodNames[n] = true end
     end
   end
   return foodNames
@@ -1393,6 +1394,8 @@ end
 function ns:ClearFoodBuffs()
   wipe(self.global.food.ids)
   wipe(self.global.food.names)
+  self.global.food.icon = nil
+  self.modules.buffs:Rebuild()
   self.modules.buffs:Update()
 end
 
@@ -1413,8 +1416,14 @@ do
     end
     if ns.db.foodBuff then
       local g = ns.global and ns.global.food
+      -- The remembered icon only counts while a food buff is picked: after "Clear"
+      -- it could still be the icon of a wrongly picked buff (e.g. Mark of the Wild).
+      local picked = g and (next(g.ids) or next(g.names))
+      -- Default icon from a food item: on some clients spell 19705 isn't Well Fed
+      -- and showed a Mark of the Wild paw instead.
+      local bread = C_Item and C_Item.GetItemIconByID and SafeCall(C_Item.GetItemIconByID, 4540)
       self.slots[#self.slots + 1] = { food = true, reminder = true,
-        icon = (g and g.icon) or SpellIcon(19705) or 133943 }
+        icon = (picked and g.icon) or bread or 133943 }
     end
   end
   function m:Update()

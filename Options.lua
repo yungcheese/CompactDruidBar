@@ -422,7 +422,7 @@ local function BuildAlerts()
   thorns:SetScript("OnEditFocusLost", function(self) db().thornsNames = self:GetText() or "" end)
   OnRefresh(function() if not thorns:HasFocus() then thorns:SetText(db().thornsNames or "") end end)
   y = y - 28
-  local partyHint = Text(c, L, y, "Names separated by commas. Tanks (group role) always get Thorns. While someone needs the buff, the icon gets a pulsing red border, a count of who needs it and a strip with one segment per party member: red = missing, pulsing = under 2 minutes left. In combat it goes on the timers and your own casts; click-to-buff only works out of combat.")
+  local partyHint = Text(c, L, y, "Names separated by commas. Tanks (group role) always get Thorns. While someone needs the buff, the icon gets a pulsing red border, a count of who needs it and a strip with one segment per party member: red = missing, pulsing = almost gone (Mark of the Wild 2 min, Thorns 1 min). Hover the icon to see the time left for everyone. In combat it goes on the timers and your own casts; click-to-buff only works out of combat.")
   partyHint:SetWidth(COLW)
   partyHint:SetTextColor(0.6, 0.6, 0.6)
 

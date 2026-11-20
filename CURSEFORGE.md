@@ -6,83 +6,46 @@ CurseForge project text for Compact Druid Bar.
 
 # Summary
 
-A compact, scalable druid bar for WoW Forever: powershift counter, clearcasting alerts, Rip/Rake timers, cooldowns, buffs and a food buff reminder in one small block. Plus party buff tracking for Mark of the Wild and Thorns, and profiles per group or spec.
+A compact, scalable druid bar for WoW Forever: powershift counter, clearcasting alerts, bleed timers, cooldowns, buffs and party buff tracking in one small block that keeps working in combat.
 
 # Description
 
 ## Compact Druid Bar
 
-Everything a druid needs, in one small bar you can scale and place anywhere. Built for feral **powershifting**, but it adapts to every form.
-
-Made for **WoW Forever** and its addon restrictions: it keeps working in combat where many classic addons break.
+Everything a druid needs in one small, scalable bar. Built for feral **powershifting**, works in every form, and made for **WoW Forever**: it keeps working in combat where many classic addons break.
 
 ### Features
 
-**Bars**
-- Health and energy / rage / mana, switching with your form
-- Combo points in Cat Form, with a glow at 5 points
-- Mana while shapeshifted, with a **powershift counter** (`x3` = shifts you can still afford) and marks that count back from your current mana: every segment is exactly one shift, measured from your real shift cost
-- **Energy tick timer**: a spark runs across the energy bar and reaches the end on the next tick (hides itself where energy regenerates continuously)
-- GCD spark on the power bar
-
-**Clearcasting**
-- Energy bar lights up, a large pulsing icon appears, plus a border flash
-- Choose your sound: the original Blizzard Clearcasting proc sound (default), 10 alert sounds included with the addon (chimes, bell, shimmer, gong...), SharedMedia sounds from DBM/WeakAuras, or any SoundKit / FileDataID
-
-**Timers and reminders**
-- Your debuffs on the target: Rip, Rake, Pounce, Faerie Fire, Demoralizing Roar, Moonfire, Insect Swarm
-- **Rip/Rake refresh warning**: the icon blinks red during its last 2 seconds
-- Cooldowns per form (Dash, Nature's Grasp, Barkskin, Innervate, Bash, Feral Charge and more)
-- Mana Potion and Demonic/Dark Rune cooldowns with item count
-- Buff reminders for Mark of the Wild and Thorns, plus a Tiger's Fury timer
-- Nature's Grasp as one icon: green with the buff timer while it's up, then its cooldown
-- **Food buff reminder**: red when you're not Well Fed, blinks in its last minute, chat note when it runs out. Works with any food, including the new WoW Forever foods (pick the buff once in the options)
+- **Bars**: health and energy / rage / mana (switches with your form), combo points with a glow at 5
+- **Powershift counter**: mana while shapeshifted, `x3` = shifts you can still afford, one mark per shift
+- **Energy tick** and **GCD** sparks on the power bar
+- **Clearcasting**: bar highlight, big pulsing icon, border flash and a sound of your choice (Blizzard's proc sound, 10 included sounds, SharedMedia or any sound ID)
+- **Target debuffs**: Rip, Rake, Pounce, Faerie Fire, Demoralizing Roar, Moonfire, Insect Swarm, with a red blink when Rip/Rake are about to drop
+- **Cooldowns** per form, plus mana potion and rune cooldowns
+- **Buffs**: Mark of the Wild, Thorns, Tiger's Fury, Nature's Grasp and a **food buff reminder**
 - **Caster view**: your Rejuvenation and Regrowth timers on a friendly target
-- **Add your own spells** (cooldowns, buffs, debuffs per form) and hide built-in ones
+- **Your own spells**: add cooldowns, buffs or debuffs per form, hide built-in ones
 
-**Party buffs** (turn on in the options, Alerts page)
-- Never forget a buff again: when someone in your party is missing **Mark of the Wild** or **Thorns**, the icon gets a pulsing red border and a count of how many need it
-- A strip on the icon shows every party member in class color: red = missing, pulsing = under 2 minutes left, faded = out of range
-- **Click the icon** to cast the buff on the next member in range who needs it (out of combat)
-- Thorns goes to the tank (group role) and to any names you add, Mark of the Wild to everyone
-- Keeps working in combat: it follows the buff timers, your own casts and deaths
-- In a raid it tracks your own subgroup; nothing changes when you play solo
+### New: party buffs
 
-**Profiles**
-- Different layouts per character, switching automatically in raids, parties or by talent spec
-- Share a layout with an export/import string
+Turn it on in the options (Alerts page). When someone in your party misses **Mark of the Wild** or **Thorns**, the icon gets a pulsing red border, a count and a strip with every member in class color (red = missing, pulsing = almost gone). **Hover** it to see how long everyone's buff lasts, **click** it to buff the next one. Thorns goes to the tank and to names you add. Keeps tracking in combat from timers and your own casts.
 
-**Layout**
-- Classic look by default: gold frame, Blizzard bar textures, combo point gems, classic icon borders; or pick Classic polished, Flat or Soft
-- One compact block, or detach any element and place it on its own
-- Scale the whole bar or each element separately (mouse wheel)
-- Snaps to the screen center, exact X/Y position in the options
-- Unlocks automatically in Blizzard's Edit Mode
-- Dimmed out of combat
-- Only shows spells you know, so it grows with you while leveling
-- Works on non-English clients (spell names come from the game)
-- Minimap addon list entry, optional minimap button
+### Layout and profiles
+
+- Classic gold look by default, or Classic polished, Flat or Soft
+- One compact block, or detach any element; scale everything with the mouse wheel
+- Unlocks with Blizzard's Edit Mode, dims out of combat, only shows spells you know
+- **Profiles** per character, switching automatically by group or talent spec, shareable as a string
+- Works on non-English clients
 
 ### Commands
 
-| Command | Action |
-|---|---|
-| `/cdb` | Options |
-| `/cdb spells` | Add or hide spells |
-| `/cdb unlock` / `/cdb lock` | Move mode |
-| `/cdb minimap` | Toggle the minimap button |
-| `/cdb test` | Preview the clearcasting alert |
-| `/cdb reset` | Reset positions |
+`/cdb` options · `/cdb spells` add or hide spells · `/cdb unlock` / `/cdb lock` move mode · `/cdb reset` reset positions · `/cdb test` preview the clearcast alert
 
-### About WoW Forever's restrictions
+### WoW Forever restrictions
 
-WoW Forever hides health, energy, mana and auras from addons during combat. Compact Druid Bar works around this:
-- Bars and numbers are drawn by the game itself.
-- The powershift counter uses game-side curves instead of addon math.
-- The energy tick is derived from the rhythm of energy updates (it needs a few ticks to lock in).
-- Rip, Rake and other debuffs, and Tiger's Fury, are timed from your own casts in combat. A missed or dodged cast can give a timer that is slightly off.
-- Party buffs are read out of combat; in combat they follow the timers and your own casts. Buffs from another druid or dispels during a fight show up once combat ends. Click-to-buff only works out of combat, because the game doesn't let addons pick a target in combat.
+Forever hides health, power and auras from addons in combat. The bars are drawn by the game itself, the powershift counter uses game-side curves, and debuffs, Tiger's Fury and party buffs are timed from your own casts. A dodged cast or a buff from another player during a fight shows up once combat ends. Click-to-buff only works out of combat: the game doesn't let addons pick a target in combat.
 
 ### Feedback
 
-Found a bug or have an idea? Open an issue on GitHub: https://github.com/yungcheese/CompactDruidBar/issues
+Bugs or ideas: https://github.com/yungcheese/CompactDruidBar/issues
