@@ -5,6 +5,7 @@
 A compact, fully scalable druid bar for **WoW Forever** (client 1.60.1, interface 16001). Built for feral powershifting, but it adapts to every form.
 
 ## Features
+- **New in 1.2: party buffs** (optional, Alerts page): the Mark of the Wild and Thorns icons light up red with a count and show who in your party still needs the buff, in class colors. Hover the icon for the time left per member. Keeps working in combat on timers and your own casts; out of combat, click the icon to buff the next one. Thorns goes to tanks and to names you choose
 - **Health** and **energy / rage / mana**: the bar switches with your form
 - **Combo points** (Cat Form only)
 - **Mana while shapeshifted** with a **powershift counter** (`x3` = shifts you can still afford) and a mark on the bar for each shift's cost
@@ -19,7 +20,6 @@ A compact, fully scalable druid bar for **WoW Forever** (client 1.60.1, interfac
 - Only shows spells you know, so it grows with you while leveling
 - **Profiles** per character, switching automatically in raids, parties or by talent spec, with import/export strings to share layouts
 - **Caster view**: your Rejuvenation and Regrowth timers on a friendly target
-- **Party buffs** (optional, Alerts page): the Mark of the Wild and Thorns icons light up red with a count and show who in your party still needs the buff, in class colors. Hover the icon for the time left per member. Keeps working in combat on timers and your own casts; out of combat, click the icon to buff the next one. Thorns goes to tanks and to names you choose
 - Dimmed out of combat
 - Four styles: Classic gold frame (default), Classic polished, Flat and Soft, with combo point gems, classic icon borders, background panel and bar sparks
 

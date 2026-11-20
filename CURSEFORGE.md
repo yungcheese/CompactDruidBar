@@ -14,6 +14,10 @@ A compact, scalable druid bar for WoW Forever: powershift counter, clearcasting 
 
 Everything a druid needs in one small, scalable bar. Built for feral **powershifting**, works in every form, and made for **WoW Forever**: it keeps working in combat where many classic addons break.
 
+### New in 1.2: party buffs
+
+Turn it on in the options (Alerts page). When someone in your party misses **Mark of the Wild** or **Thorns**, the icon gets a pulsing red border, a count and a strip with every member in class color (red = missing, pulsing = almost gone). **Hover** it to see how long everyone's buff lasts, **click** it to buff the next one. Thorns goes to the tank and to names you add. Keeps tracking in combat from timers and your own casts.
+
 ### Features
 
 - **Bars**: health and energy / rage / mana (switches with your form), combo points with a glow at 5
@@ -25,10 +29,6 @@ Everything a druid needs in one small, scalable bar. Built for feral **powershif
 - **Buffs**: Mark of the Wild, Thorns, Tiger's Fury, Nature's Grasp and a **food buff reminder**
 - **Caster view**: your Rejuvenation and Regrowth timers on a friendly target
 - **Your own spells**: add cooldowns, buffs or debuffs per form, hide built-in ones
-
-### New: party buffs
-
-Turn it on in the options (Alerts page). When someone in your party misses **Mark of the Wild** or **Thorns**, the icon gets a pulsing red border, a count and a strip with every member in class color (red = missing, pulsing = almost gone). **Hover** it to see how long everyone's buff lasts, **click** it to buff the next one. Thorns goes to the tank and to names you add. Keeps tracking in combat from timers and your own casts.
 
 ### Layout and profiles
 
