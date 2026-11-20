@@ -43,8 +43,9 @@ local DEFAULTS = {
   ccGlow = true, ccSound = true, ccFlash = true,
   ccSoundKey = "fid:569649", ccSoundChannel = "Master",
   bleedWarn = true, consumables = true, cpGlow = true, gcdSpark = true,
-  trainerHelper = true, levelUpReminder = true, casterView = true,
-  foodBuff = true, foodWarn = true, role = "auto",
+  casterView = true,
+  foodBuff = true, foodWarn = true,
+  partyBuffs = false, partyClick = true, thornsNames = "",
   style = "gold", gems = true, iconBorder = true, panel = true, barSpark = true,
   iconSizes = { debuffs = 22, cooldowns = 22, buffs = 22 }, -- per icon row
   point = { "CENTER", "UIParent", "CENTER", 0, -160 },
@@ -261,6 +262,7 @@ end
 
 -- Built-in spells per category (used by the Spells options page).
 ns.S = S
+ns.SPELL_TO_KEY, ns.IsKnown, ns.KnownID, ns.KeyFromName = SPELL_TO_KEY, IsKnown, KnownID, KeyFromName
 ns.BUILTIN = {
   { cat = "Debuffs", keys = { "rip", "rake", "pounce", "ffFeral", "ff", "demo", "moonfire", "swarm" } },
   { cat = "Cooldowns", keys = { "dash", "grasp", "barkskin", "innervate", "rebirth", "bash", "charge", "enrage", "frenzied", "swiftmend", "nswift", "hurricane" } },
@@ -479,6 +481,7 @@ end
 
 -- On Forever auras can't be read in combat. An empty result in combat
 -- therefore means "unknown", not "no auras": keep showing the last state.
+ns.ScanAuras, ns.IconBorderColor = ScanAuras, IconBorderColor
 local function AurasUnknown(list, err)
   return err ~= nil or (#list == 0 and UnitAffectingCombat("player"))
 end
@@ -2430,8 +2433,8 @@ function ns:Debug()
     show("Shift cost (used)", ns.modules.mana.ShiftCost())
     show("Shift cost (game)", ns.modules.mana.ApiShiftCost())
     show("Shift cost (measured cat/bear)", tostring(ns.charData.shiftCost.cat) .. " / " .. tostring(ns.charData.shiftCost.bear))
-    print(("  Profile: %s (%s), spec: %s, role: %s"):format(tostring(ns.activeProfile), select(2, ns:WantedProfile()) or "?",
-      tostring(ns:CurrentSpec()), tostring(ns.CurrentRole and ns:CurrentRole())))
+    print(("  Profile: %s (%s), spec: %s"):format(tostring(ns.activeProfile), select(2, ns:WantedProfile()) or "?",
+      tostring(ns:CurrentSpec())))
     try("Talents", function()
       local parts = {}
       for i = 1, 3 do
@@ -2499,15 +2502,6 @@ function ns:Debug()
         math.floor(pw or 0), math.floor(ph or 0), ns.panel:GetEffectiveAlpha() or 0))
     end)
     print(("  Energy tick known: %s"):format(tostring(ns.modules.power.lastTick > 0)))
-    try("Trainer", function()
-      local d = ns.trainerDebug or {}
-      local evs = {}
-      for e, n in pairs(d.events or {}) do evs[#evs + 1] = e .. "=" .. n end
-      print(("  Trainer: events %s, ran %s, API %s, services %s, profession %s, frame %s"):format(
-        #evs > 0 and table.concat(evs, " ") or "none", tostring(d.ran), tostring(d.api), tostring(d.n),
-        tostring(d.tradeskill), tostring(d.frame)))
-      print(("  Trainer first: %s, learnable: %s, result: %s"):format(tostring(d.first), tostring(d.available), tostring(d.stop)))
-    end)
     try("Energy rhythm", function()
       local pm = ns.modules.power
       local med, n = pm:EnergyRhythm()

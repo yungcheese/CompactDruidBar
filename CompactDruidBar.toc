@@ -12,5 +12,5 @@
 
 Core.lua
 Profiles.lua
-Trainer.lua
+Party.lua
 Options.lua

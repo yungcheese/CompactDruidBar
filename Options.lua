@@ -409,14 +409,22 @@ local function BuildAlerts()
   y = Section(c, L, y - 40, COLW, "Warnings")
   Checkbox(c, L, y, "Rip/Rake refresh warning (last 2 sec)", Flag("bleedWarn")); y = y - 24
 
-  y = Section(c, L, y - 16, COLW, "Leveling")
-  Checkbox(c, L, y, "Trainer helper (what's worth buying)", Flag("trainerHelper")); y = y - 24
-  Checkbox(c, L, y, "Note on level-up: new at the trainer", Flag("levelUpReminder")); y = y - 30
-  Text(c, L, y - 4, "Your role:")
-  Dropdown(c, L + 70, y, 200,
-    function() return { { "auto", "Auto (from talents)" }, { "feral", "Feral" }, { "balance", "Balance" }, { "resto", "Restoration" } } end,
-    function() return db().role or "auto" end,
-    function(v) db().role = v end)
+  y = Section(c, L, y - 16, COLW, "Party buffs")
+  Checkbox(c, L, y, "Show who needs Mark of the Wild / Thorns", Flag("partyBuffs")); y = y - 24
+  Checkbox(c, L, y, "Click the icon to buff the next one", Flag("partyClick")); y = y - 30
+  Text(c, L, y - 4, "Thorns also on:")
+  local thorns = EditBox(c, L + 90, y, 180)
+  local function SaveThorns(self)
+    db().thornsNames = self:GetText() or ""
+    self:ClearFocus()
+  end
+  thorns:SetScript("OnEnterPressed", SaveThorns)
+  thorns:SetScript("OnEditFocusLost", function(self) db().thornsNames = self:GetText() or "" end)
+  OnRefresh(function() if not thorns:HasFocus() then thorns:SetText(db().thornsNames or "") end end)
+  y = y - 28
+  local partyHint = Text(c, L, y, "Names separated by commas. Tanks (group role) always get Thorns. While someone needs the buff, the icon gets a pulsing red border, a count of who needs it and a strip with one segment per party member: red = missing, pulsing = under 2 minutes left. In combat it goes on the timers and your own casts; click-to-buff only works out of combat.")
+  partyHint:SetWidth(COLW)
+  partyHint:SetTextColor(0.6, 0.6, 0.6)
 
   y = Section(c, R, -80, COLW, "Sound")
   Text(c, R, y - 4, "Sound:")

@@ -6,7 +6,7 @@ CurseForge project text for Compact Druid Bar.
 
 # Summary
 
-A compact, scalable druid bar for WoW Forever: powershift counter, clearcasting alerts, Rip/Rake timers, cooldowns, buffs and a food buff reminder in one small block. Plus profiles and a trainer helper that tells you what's worth buying.
+A compact, scalable druid bar for WoW Forever: powershift counter, clearcasting alerts, Rip/Rake timers, cooldowns, buffs and a food buff reminder in one small block. Plus party buff tracking for Mark of the Wild and Thorns, and profiles per group or spec.
 
 # Description
 
@@ -40,9 +40,13 @@ Made for **WoW Forever** and its addon restrictions: it keeps working in combat 
 - **Caster view**: your Rejuvenation and Regrowth timers on a friendly target
 - **Add your own spells** (cooldowns, buffs, debuffs per form) and hide built-in ones
 
-**Leveling**
-- **Trainer helper**: at the class trainer a small panel tells you what to buy for your role, what is optional and what you can skip, with the gold it saves. Knows that rank 1 is enough for spells like Revive and Rebirth. Nothing is ever bought for you
-- A chat note on level-up with what's new at your trainer
+**Party buffs** (turn on in the options, Alerts page)
+- Never forget a buff again: when someone in your party is missing **Mark of the Wild** or **Thorns**, the icon gets a pulsing red border and a count of how many need it
+- A strip on the icon shows every party member in class color: red = missing, pulsing = under 2 minutes left, faded = out of range
+- **Click the icon** to cast the buff on the next member in range who needs it (out of combat)
+- Thorns goes to the tank (group role) and to any names you add, Mark of the Wild to everyone
+- Keeps working in combat: it follows the buff timers, your own casts and deaths
+- In a raid it tracks your own subgroup; nothing changes when you play solo
 
 **Profiles**
 - Different layouts per character, switching automatically in raids, parties or by talent spec
@@ -77,6 +81,7 @@ WoW Forever hides health, energy, mana and auras from addons during combat. Comp
 - The powershift counter uses game-side curves instead of addon math.
 - The energy tick is derived from the rhythm of energy updates (it needs a few ticks to lock in).
 - Rip, Rake and other debuffs, and Tiger's Fury, are timed from your own casts in combat. A missed or dodged cast can give a timer that is slightly off.
+- Party buffs are read out of combat; in combat they follow the timers and your own casts. Buffs from another druid or dispels during a fight show up once combat ends. Click-to-buff only works out of combat, because the game doesn't let addons pick a target in combat.
 
 ### Feedback
 
