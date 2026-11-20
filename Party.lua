@@ -117,10 +117,21 @@ local function Status(guid, key, now)
   return "ok"
 end
 
-local function InRange(unit)
-  local ok, inRange, checked = pcall(UnitInRange, unit)
-  if not (ok and readable(inRange, checked)) then return true end
-  return not checked or inRange
+-- true = in range of the buff spell, false = too far, nil = can't tell.
+-- A click on someone out of range made the game cast the buff on yourself
+-- instead, so click-to-buff only picks members confirmed in range.
+local function InRange(unit, key)
+  if not Safe(UnitIsVisible, unit) then return false end
+  local spell = CastName(key)
+  if spell then
+    local r
+    if C_Spell and C_Spell.IsSpellInRange then r = Safe(C_Spell.IsSpellInRange, spell, unit)
+    elseif IsSpellInRange then r = Safe(IsSpellInRange, spell, unit) end
+    if r ~= nil then return r == true or r == 1 end
+  end
+  local inRange, checked = Safe(UnitInRange, unit)
+  if checked then return inRange and true or false end
+  return nil
 end
 
 -- Fills targets[key]; returns whether anyone needs it and who to click-cast on.
@@ -140,11 +151,12 @@ local function Collect(key, names, now)
     if guid and not dead and Safe(UnitIsConnected, u) ~= false
       and (key == "motw" or IsTank(u, names)) then
       local status, left = Status(guid, key, now)
-      local range = InRange(u)
-      list[#list + 1] = { unit = u, status = status, left = left, range = range }
+      local range = InRange(u, key)
+      -- Display: only "out of range" when we know it; click: only when we know it's in range.
+      list[#list + 1] = { unit = u, status = status, left = left, range = range ~= false }
       if status == "missing" or status == "expiring" then
         need = true
-        if range and not clickUnit then clickUnit = u end
+        if range == true and not clickUnit then clickUnit = u end
       end
     end
   end
@@ -281,6 +293,9 @@ local function GetButton(key)
   b = CreateFrame("Button", "CompactDruidBarPartyBuff_" .. key, UIParent, "SecureActionButtonTemplate")
   b:RegisterForClicks("AnyUp", "AnyDown")
   b:SetAttribute("type", "spell")
+  -- Never redirect to yourself or your focus (self-cast modifier).
+  b:SetAttribute("checkselfcast", false)
+  b:SetAttribute("checkfocuscast", false)
   b.key = key
   b:SetScript("OnEnter", ShowTooltip)
   b:SetScript("OnLeave", function() GameTooltip:Hide() end)
