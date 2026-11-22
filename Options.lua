@@ -399,7 +399,7 @@ end
 -- Page: Alerts (clearcasting and warnings)
 ------------------------------------------------------------------------
 local function BuildAlerts()
-  local panel, c = MakePage("Alerts", 560)
+  local panel, c = MakePage("Alerts", 720)
   PageTitle(c, "Alerts", "How Clearcasting procs and refresh warnings get your attention.")
 
   local y = Section(c, L, -80, COLW, "Clearcasting")
@@ -410,6 +410,10 @@ local function BuildAlerts()
 
   y = Section(c, L, y - 40, COLW, "Warnings")
   Checkbox(c, L, y, "Rip/Rake refresh warning (last 2 sec)", Flag("bleedWarn")); y = y - 24
+
+  y = Section(c, L, y - 16, COLW, "Revelation (weapon enchant)")
+  Checkbox(c, L, y, "Show Revelation when it procs", Flag("revelation")); y = y - 24
+  Checkbox(c, L, y, "Play the alert sound on proc", Flag("revSound")); y = y - 24
 
   y = Section(c, L, y - 16, COLW, "Party buffs")
   Checkbox(c, L, y, "Show who needs Mark of the Wild / Thorns", Flag("partyBuffs")); y = y - 24

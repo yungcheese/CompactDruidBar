@@ -43,7 +43,7 @@ local DEFAULTS = {
   ccGlow = true, ccSound = true, ccFlash = true,
   ccSoundKey = "fid:569649", ccSoundChannel = "Master",
   bleedWarn = true, consumables = true, cpGlow = true, gcdSpark = true,
-  manaTick = true, fsrBar = true,
+  manaTick = true, fsrBar = true, revelation = true, revSound = false,
   casterView = true,
   foodBuff = true, foodWarn = true,
   partyBuffs = false, partyClick = true, thornsNames = "",
@@ -1484,6 +1484,25 @@ function ns:ClearFoodBuffs()
   self.modules.buffs:Update()
 end
 
+-- Revelation (WoW Forever weapon enchant) ------------------------------
+-- "Chance to trigger Revelation when a non-periodic spell fails to crit;
+-- Revelation grants 100% increased crit chance to the next non-periodic spell."
+-- Shown only while your main hand carries the enchant (enchant ID 8217).
+local REVELATION_ENCHANT = 8217
+local function HasRevelationEnchant()
+  local link = SafeCall(GetInventoryItemLink, "player", 16)
+  if not link or not readable(link) then return false end
+  local enchant = link:match("item:%d+:(%d*)")
+  return tonumber(enchant) == REVELATION_ENCHANT
+end
+ns.HasRevelationEnchant = HasRevelationEnchant
+local function IsRevelationAura(a)
+  local g = ns.global
+  if g and g.revelationId and readable(a.spellId) and a.spellId == g.revelationId then return true end
+  return readable(a.name) and a.name == "Revelation"
+end
+ns.revDebug = {}
+
 -- Buffs -------------------------------------------------------------
 do
   local m = IconRow("buffs")
@@ -1498,6 +1517,10 @@ do
     end
     for _, c in ipairs(CustomFor("buff")) do
       self.slots[#self.slots + 1] = { custom = c, icon = CustomIcon(c) }
+    end
+    if ns.db.revelation and HasRevelationEnchant() then
+      self.slots[#self.slots + 1] = { rev = true,
+        icon = (ns.global and ns.global.revelationIcon) or SpellIcon(1248805) or 135923 }
     end
     if ns.db.foodBuff then
       local g = ns.global and ns.global.food
@@ -1535,6 +1558,14 @@ do
       local ic, a = self.icons[i], nil
       if slot.food then
         for _, x in ipairs(auras) do if not a and IsFoodAura(x) then a = x end end
+      elseif slot.rev then
+        for _, x in ipairs(auras) do if not a and IsRevelationAura(x) then a = x end end
+        if a and ns.global then
+          -- Learn this client's buff ID and icon, so it can be checked by ID in combat.
+          if readable(a.spellId) then ns.global.revelationId = a.spellId end
+          if a.icon then ns.global.revelationIcon = a.icon end
+        end
+        m:SetRevelation(a ~= nil)
       elseif slot.custom then
         a = byId[slot.custom.id] or (slot.custom.name and byName[slot.custom.name])
       else
@@ -1567,9 +1598,35 @@ do
       end
     end
   end
+  -- Revelation turned on/off: gold pulsing border and an optional sound.
+  function m:SetRevelation(on)
+    if on and not self.revOn and ns.db.revSound then ns:PlayAlertSound() end
+    self.revOn = on
+  end
+  -- In combat auras are blocked; try asking for the learned Revelation ID directly.
+  function m:CheckRevelationInCombat()
+    local id = ns.global and ns.global.revelationId
+    local d = ns.revDebug
+    if not id then d.combat = "buff ID not learned yet" return end
+    if not (C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID) then d.combat = "no API" return end
+    local ok, a = pcall(C_UnitAuras.GetPlayerAuraBySpellID, id)
+    if not ok then d.combat = "blocked: " .. tostring(a) return end
+    if a ~= nil and not readable(a) then d.combat = "secret result" return end
+    d.combat = a and "active (readable)" or "not active (readable)"
+    self:SetRevelation(a ~= nil)
+    for i, slot in ipairs(self.slots) do
+      local ic = self.icons[i]
+      if slot.rev and ic then
+        ic.tex:SetTexture(slot.icon)
+        SetIconState(ic, a ~= nil)
+        if not a then ic.cd:Clear() end
+      end
+    end
+  end
   -- Only touches slots we track by cast; all other buffs keep their last known state.
   function m:ShowFromCasts()
     local now = GetTime()
+    self:CheckRevelationInCombat()
     for i, slot in ipairs(self.slots) do
       local t = slot.key and ns.buffCasts[slot.key]
       local ic = self.icons[i]
@@ -1599,7 +1656,12 @@ do
       end
       -- Food buff: blink orange during its last minute.
       local left = ic.food and ic.expires and (ic.expires - now)
-      if ns.db.foodWarn and left and left > 0 and left < 60 then
+      if slot and slot.rev and m.revOn then
+        -- Revelation up: pulsing gold border until your next big spell uses it.
+        ic:SetAlpha(1)
+        ic:SetBackdropBorderColor(1, 0.82, 0.1, 0.45 + 0.55 * math.abs(math.sin(now * 5)))
+        ic.blinking = true
+      elseif ns.db.foodWarn and left and left > 0 and left < 60 then
         ic:SetAlpha(0.4 + 0.6 * math.abs(math.sin(now * 4)))
         ic:SetBackdropBorderColor(1, 0.55, 0.1, 1)
         ic.blinking = true
@@ -2279,6 +2341,7 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
     TryRegister("BAG_UPDATE_COOLDOWN")
     TryRegister("BAG_UPDATE_DELAYED")
     TryRegister("UNIT_AURA", "player", "target")
+    TryRegister("PLAYER_EQUIPMENT_CHANGED")
     TryRegister("UNIT_POWER_FREQUENT", "player")
     TryRegister("UNIT_SPELLCAST_SUCCEEDED", "player")
     TryRegister("UNIT_DISPLAYPOWER", "player")
@@ -2335,6 +2398,9 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
     ns.modules.debuffs:Update()
     ns.modules.combo:Update()
     ns:UpdateAlpha()
+  elseif event == "PLAYER_EQUIPMENT_CHANGED" then
+    ns.modules.buffs:Rebuild()
+    ns.modules.buffs:Update()
   elseif event == "SPELL_UPDATE_COOLDOWN" or event == "BAG_UPDATE_COOLDOWN" or event == "BAG_UPDATE_DELAYED" then
     ns.modules.cooldowns:Update()
   elseif event == "UNIT_POWER_FREQUENT" then
@@ -2603,6 +2669,11 @@ function ns:Debug()
         med and ("%.2fs"):format(med) or "not enough data (stand in caster form ~20s, out of the 5-sec rule)", n,
         med and (pm:ManaContinuous() and "CONTINUOUS regen (spark hidden)" or "TICKS") or "?",
         tostring(pm.manaTick > 0)))
+    end)
+    try("Revelation", function()
+      print(("  Revelation: enchant on weapon %s, buff ID %s, active %s, in-combat check: %s"):format(
+        tostring(HasRevelationEnchant()), tostring(ns.global.revelationId), tostring(ns.modules.buffs.revOn),
+        tostring(ns.revDebug.combat or "not run yet")))
     end)
     try("Energy rhythm", function()
       local pm = ns.modules.power

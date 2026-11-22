@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+- **Mana tick timer** (caster): a light-blue spark on the mana bar reaches the end on your next mana tick (hidden when mana regenerates continuously)
+- **5-second rule line** (caster): after a spell that costs mana, a light-blue line along the top of the mana bar shrinks over 5 seconds until spirit regen is back
+- **Revelation** (WoW Forever weapon enchant): while your main hand has it, an icon in the buff row lights up with a pulsing gold border when Revelation procs; optional alert sound
+
 ## v1.2.0
 - **Party buffs** (optional, Alerts page): while someone needs Mark of the Wild or Thorns, the icon gets a pulsing red border, a count and a strip with one segment per party member (your own subgroup in a raid), in class color. Red = missing, pulsing = almost gone (Mark of the Wild 2 min, Thorns 1 min), faded = out of range. Only shown while someone needs the buff; in combat (where other players' buffs can't be read) it keeps going on the buff timers, your own casts and deaths. Hover the icon to see how long everyone's buff still lasts. Out of combat, click the icon to cast it on the first member in range who needs it. Thorns goes to tanks (group role) and to the names you enter
 - Removed the trainer helper and the level-up note
