@@ -45,7 +45,7 @@ local DEFAULTS = {
   bleedWarn = true, consumables = true, cpGlow = true, gcdSpark = true,
   manaTick = true, fsrBar = true, revelation = true, revSound = false,
   casterView = true,
-  foodBuff = true, foodWarn = true,
+  foodBuff = true, foodWarn = true, foodClick = true,
   partyBuffs = false, partyClick = true, thornsNames = "",
   style = "gold", gems = true, iconBorder = true, panel = true, barSpark = true,
   iconSizes = { debuffs = 22, cooldowns = 22, buffs = 22 }, -- per icon row
@@ -1523,15 +1523,9 @@ do
         icon = (ns.global and ns.global.revelationIcon) or SpellIcon(1248805) or 135923 }
     end
     if ns.db.foodBuff then
-      local g = ns.global and ns.global.food
-      -- The remembered icon only counts while a food buff is picked: after "Clear"
-      -- it could still be the icon of a wrongly picked buff (e.g. Mark of the Wild).
-      local picked = g and (next(g.ids) or next(g.names))
-      -- Default icon from a food item: on some clients spell 19705 isn't Well Fed
-      -- and showed a Mark of the Wild paw instead.
-      local bread = C_Item and C_Item.GetItemIconByID and SafeCall(C_Item.GetItemIconByID, 4540)
-      self.slots[#self.slots + 1] = { food = true, reminder = true,
-        icon = (picked and g.icon) or bread or 133943 }
+      -- Always the classic "Well Fed" icon, by texture path: on some clients spell
+      -- 19705 isn't Well Fed and its icon was a Mark of the Wild paw.
+      self.slots[#self.slots + 1] = { food = true, reminder = true, icon = "Interface\\Icons\\Spell_Misc_Food" }
     end
   end
   function m:Update()
@@ -1573,7 +1567,7 @@ do
       end
       ic.food = slot.food
       if a then
-        ic.tex:SetTexture(a.icon or slot.icon)
+        ic.tex:SetTexture((slot.food and slot.icon) or a.icon or slot.icon)
         SetIconState(ic, true)
         SetAuraTimer(ic, "player", a)
         if slot.food then

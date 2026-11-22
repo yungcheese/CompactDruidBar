@@ -13,4 +13,5 @@
 Core.lua
 Profiles.lua
 Party.lua
+Food.lua
 Options.lua

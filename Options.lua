@@ -466,7 +466,8 @@ local function BuildAlerts()
 
   y = Section(c, R, y - 90, COLW, "Food buff")
   Checkbox(c, R, y, "Food buff icon (red when missing)", Flag("foodBuff")); y = y - 24
-  Checkbox(c, R, y, "Blink in its last minute", Flag("foodWarn")); y = y - 30
+  Checkbox(c, R, y, "Blink in its last minute", Flag("foodWarn")); y = y - 24
+  Checkbox(c, R, y, "Click to eat (right-click: pick the food)", Flag("foodClick")); y = y - 30
   local foodHint = Text(c, R, y, "\"Well Fed\" is recognized automatically. Food with another buff name: eat it, then pick its buff here.")
   foodHint:SetWidth(COLW)
   foodHint:SetTextColor(0.6, 0.6, 0.6)

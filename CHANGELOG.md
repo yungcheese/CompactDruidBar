@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- **Click to eat**: left-click the food buff icon to eat the food you picked; right-click to pick it from the food and drink in your bags (out of combat)
+- The food buff icon is the classic Well Fed icon again
 - **Mana tick timer** (caster): a light-blue spark on the mana bar reaches the end on your next mana tick (hidden when mana regenerates continuously)
 - **5-second rule line** (caster): after a spell that costs mana, a light-blue line along the top of the mana bar shrinks over 5 seconds until spirit regen is back
 - **Revelation** (WoW Forever weapon enchant): while your main hand has it, an icon in the buff row lights up with a pulsing gold border when Revelation procs; optional alert sound
