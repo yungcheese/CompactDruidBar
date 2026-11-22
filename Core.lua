@@ -43,6 +43,7 @@ local DEFAULTS = {
   ccGlow = true, ccSound = true, ccFlash = true,
   ccSoundKey = "fid:569649", ccSoundChannel = "Master",
   bleedWarn = true, consumables = true, cpGlow = true, gcdSpark = true,
+  manaTick = true, fsrBar = true,
   casterView = true,
   foodBuff = true, foodWarn = true,
   partyBuffs = false, partyClick = true, thornsNames = "",
@@ -629,6 +630,7 @@ do
     return med ~= nil and n >= 8 and med < 0.6
   end
   function m:OnPower()
+    if UnitPowerType("player") == 0 then self:OnManaEvent() end
     if UnitPowerType("player") ~= 3 then self.lastPower = nil return end
     if not (self.gcdStart and GetTime() - self.gcdStart < 0.25) then self:RecordEnergyEvent() end
     local e, max = UnitPower("player", 3), UnitPowerMax("player", 3)
@@ -642,18 +644,101 @@ do
     self.lastPower = e
   end
 
+  -- Mana (caster form): the same rhythm trick as for energy, with its own
+  -- histogram. Mana regenerates in 2 sec ticks; updates within 0.25 sec of our
+  -- own casts are spending, not regen, and are ignored.
+  local mbins, mTimes = {}, {}
+  for i = 1, NB do mbins[i] = 0 end
+  local function MBin(i) return mbins[(i - 1) % NB + 1] end
+  m.manaTick = 0
+  function m:OnManaEvent()
+    local now = GetTime()
+    if self.gcdStart and now - self.gcdStart < 0.25 then return end
+    mTimes[#mTimes + 1] = now
+    if #mTimes > 40 then table.remove(mTimes, 1) end
+    local b = math.floor((now % 2) / 2 * NB) % NB + 1
+    for i = 1, NB do mbins[i] = mbins[i] * 0.96 end
+    mbins[b] = mbins[b] + 1
+    local best, bestV = 1, -1
+    for i = 1, NB do
+      local v = MBin(i - 1) + MBin(i) + MBin(i + 1)
+      if v > bestV then best, bestV = i, v end
+    end
+    local second = 0
+    for i = 1, NB do
+      local d = math.abs(i - best)
+      d = math.min(d, NB - d)
+      if d > 3 then second = math.max(second, MBin(i - 1) + MBin(i) + MBin(i + 1)) end
+    end
+    if bestV < 3 or bestV < second * 1.8 then return end
+    local wl, wc, wr = MBin(best - 1), MBin(best), MBin(best + 1)
+    local offset = (wr - wl) / (wl + wc + wr)
+    self.manaTick = ((best - 1 + 0.5 + offset) * 2 / NB) % 2 + 2
+  end
+  -- Median gap between mana updates; much faster than 2 sec = continuous regen.
+  function m:ManaRhythm()
+    local gaps = {}
+    for i = 2, #mTimes do gaps[#gaps + 1] = mTimes[i] - mTimes[i - 1] end
+    if #gaps < 8 then return nil, #gaps end
+    table.sort(gaps)
+    return gaps[math.floor(#gaps / 2) + 1], #gaps
+  end
+  function m:ManaContinuous()
+    local med = self:ManaRhythm()
+    return med ~= nil and med < 0.6
+  end
+
+  -- 5-second rule: after a spell that costs mana, spirit regen pauses for 5 sec.
+  -- A light-blue line along the top of the mana bar shrinks until it's back.
+  m.fsr = m.bar.bar:CreateTexture(nil, "OVERLAY", nil, 7)
+  m.fsr:SetColorTexture(0.55, 0.85, 1, 0.95)
+  m.fsr:SetHeight(2)
+  m.fsr:SetPoint("TOPLEFT", m.bar.bar, "TOPLEFT", 0, 0)
+  m.fsr:Hide()
+  m.mspark = m.bar.bar:CreateTexture(nil, "OVERLAY", nil, 7)
+  m.mspark:SetColorTexture(0.75, 0.95, 1, 0.95)
+  m.mspark:SetWidth(2)
+  m.mspark:Hide()
+
   -- GCD spark: a thin line along the bottom of the power bar that fills during the global cooldown.
   m.gcd = m.bar.bar:CreateTexture(nil, "OVERLAY", nil, 7)
   m.gcd:SetColorTexture(1, 1, 1, 0.85)
   m.gcd:SetHeight(2)
   m.gcd:SetPoint("BOTTOMLEFT", m.bar.bar, "BOTTOMLEFT", 0, 0)
   m.gcd:Hide()
-  function m:OnCast()
+  function m:OnCast(spellID)
     self.gcdStart = GetTime()
     self.gcdDur = (ns.form == "cat") and 1.0 or 1.5
+    -- A spell that cost mana starts the 5-second rule.
+    if UnitPowerType("player") == 0 and spellID and readable(spellID) then
+      local cost = PowerCost(spellID)
+      if readable(cost) and type(cost) == "number" and cost > 0 then self.fsrStart = GetTime() end
+    end
+  end
+  -- Mana tick spark and 5-second rule (caster forms with a mana bar).
+  function m:UpdateManaTimers()
+    local mana = UnitPowerType("player") == 0
+    local now, w = GetTime(), self.bar.bar:GetWidth()
+    local fsrLeft = self.fsrStart and (self.fsrStart + 5 - now)
+    if mana and ns.db.fsrBar and fsrLeft and fsrLeft > 0 then
+      self.fsr:SetWidth(math.max(1, w * fsrLeft / 5))
+      self.fsr:Show()
+    else
+      self.fsr:Hide()
+    end
+    if mana and ns.db.manaTick and self.manaTick > 0 and not self:ManaContinuous() then
+      local x = w * (((now - self.manaTick) % 2) / 2)
+      self.mspark:ClearAllPoints()
+      self.mspark:SetPoint("TOP", self.bar.bar, "TOPLEFT", x, 0)
+      self.mspark:SetPoint("BOTTOM", self.bar.bar, "BOTTOMLEFT", x, 0)
+      self.mspark:Show()
+    else
+      self.mspark:Hide()
+    end
   end
 
   m.frame:SetScript("OnUpdate", function()
+    if ns.db then m:UpdateManaTimers() end
     if not (ns.db and (ns.db.gcdSpark or ns.db.energyTick)) then
       if m.gcd:IsShown() then m.gcd:Hide() end
       if m.spark:IsShown() then m.spark:Hide() end
@@ -2256,7 +2341,7 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
     ns.modules.power:OnPower()
     ns:UpdateBars({ "power", "mana", "combo" })
   elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
-    ns.modules.power:OnCast()
+    ns.modules.power:OnCast(arg3)
     ns.modules.mana:OnCast(arg3)
     ns:TrackCast(arg3)
   elseif event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" then
@@ -2511,6 +2596,14 @@ function ns:Debug()
         math.floor(pw or 0), math.floor(ph or 0), ns.panel:GetEffectiveAlpha() or 0))
     end)
     print(("  Energy tick known: %s"):format(tostring(ns.modules.power.lastTick > 0)))
+    try("Mana rhythm", function()
+      local pm = ns.modules.power
+      local med, n = pm:ManaRhythm()
+      print(("  Mana updates: median gap %s over %d gaps -> %s, tick known: %s"):format(
+        med and ("%.2fs"):format(med) or "not enough data (stand in caster form ~20s, out of the 5-sec rule)", n,
+        med and (pm:ManaContinuous() and "CONTINUOUS regen (spark hidden)" or "TICKS") or "?",
+        tostring(pm.manaTick > 0)))
+    end)
     try("Energy rhythm", function()
       local pm = ns.modules.power
       local med, n = pm:EnergyRhythm()

@@ -379,6 +379,8 @@ local function BuildLook()
   Checkbox(c, R, y, "Text on bars", Flag("showText")); y = y - 24
   Checkbox(c, R, y, "Energy tick timer", Flag("energyTick")); y = y - 24
   Checkbox(c, R, y, "GCD spark on power bar", Flag("gcdSpark")); y = y - 24
+  Checkbox(c, R, y, "Mana tick timer (caster)", Flag("manaTick")); y = y - 24
+  Checkbox(c, R, y, "5-second rule line (caster)", Flag("fsrBar")); y = y - 24
   Checkbox(c, R, y, "Powershift marks on mana", Flag("manaTicks")); y = y - 24
   Checkbox(c, R, y, "Glow at 5 combo points", Flag("cpGlow")); y = y - 24
 
